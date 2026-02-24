@@ -95,18 +95,45 @@ launch_nexus_processes() {
     if [ "$AUTO_CLEAN_LOGS" = true ]; then
         echo -e "\033[1;33m🧹 Auto-cleaning logs (AUTO_CLEAN_LOGS=true)...\033[0m"
         
+        # Check which nodes are running
+        running_nodes=()
+        for node_id in "${node_ids[@]}"; do
+            if check_node_running "$node_id"; then
+                running_nodes+=("$node_id")
+            fi
+        done
+        
         if check_logs_status "files"; then
             echo -e "\033[1;36m📄 Existing log files found:\033[0m"
             show_log_sizes false
-            echo -e "\033[1;31m🗑️  Deleting existing logs...\033[0m"
+            
+            # Delete log files only for nodes that are NOT running
+            deleted_count=0
+            preserved_count=0
+            for log_file in logs/nexus_node_*.log; do
+                if [ -f "$log_file" ]; then
+                    node_id=$(basename "$log_file" .log | sed 's/nexus_node_//')
+                    
+                    # Check if this node is currently running
+                    if [[ " ${running_nodes[*]} " =~ " ${node_id} " ]]; then
+                        echo -e "\033[1;33m� Preserving log for running Node $node_id\033[0m"
+                        preserved_count=$((preserved_count + 1))
+                    else
+                        echo -e "\033[1;31m🗑️  Deleting log for stopped Node $node_id\033[0m"
+                        rm -f "$log_file"
+                        deleted_count=$((deleted_count + 1))
+                    fi
+                fi
+            done
+            
+            echo ""
+            echo -e "\033[1;32m✅ Log cleanup completed:\033[0m"
+            echo -e "   Deleted: \033[1;31m$deleted_count\033[0m log files"
+            echo -e "   Preserved: \033[1;32m$preserved_count\033[0m log files (running nodes)"
         else
             echo -e "\033[1;32m✅ No existing log files found.\033[0m"
         fi
         
-        # Delete existing log files
-        rm -f logs/nexus_node_*.log
-        
-        echo -e "\033[1;32m✅ Log cleanup completed.\033[0m"
         echo ""
     fi
     
@@ -147,7 +174,7 @@ launch_nexus_processes() {
             echo -e "\033[1;33m⚠️  Node $node_id is already running! Skipping...\033[0m"
             echo -e "\033[1;36m� Tip: Use option 0 to stop all processes first.\033[0m"
         else
-            echo -e "\033[1;36m�📋 Starting Node $node_id...\033[0m"
+            echo -e "\033[1;36m�� Starting Node $node_id...\033[0m"
             
             # Start nexus-network in background with nohup, redirecting output to log file
             nohup nexus-network start --headless --node-id "$node_id" > "logs/nexus_node_$node_id.log" 2>&1 &
