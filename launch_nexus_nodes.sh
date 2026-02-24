@@ -20,7 +20,34 @@ node_ids=(
 )
 
 # Setting: Auto-clean logs on startup (default: true)
+# Will be loaded from settings file if it exists
 AUTO_CLEAN_LOGS=true
+
+# Settings file path
+SETTINGS_FILE="settings.conf"
+
+# Function to load settings from file
+load_settings() {
+    if [ -f "$SETTINGS_FILE" ]; then
+        # Source the settings file
+        source "$SETTINGS_FILE"
+        echo -e "\033[1;32m✅ Settings loaded from $SETTINGS_FILE\033[0m"
+    else
+        echo -e "\033[1;33m⚠️  Settings file not found, using defaults\033[0m"
+    fi
+}
+
+# Function to save settings to file
+save_settings() {
+    cat > "$SETTINGS_FILE" << EOF
+# Nexus Network Node Manager Settings
+# Generated automatically - do not edit manually
+
+# Auto-clean logs on startup (true/false)
+AUTO_CLEAN_LOGS=$AUTO_CLEAN_LOGS
+EOF
+    echo -e "\033[1;32m✅ Settings saved to $SETTINGS_FILE\033[0m"
+}
 
 # Reusable functions for common operations
 
@@ -534,6 +561,9 @@ toggle_auto_clean_logs() {
                 echo -e "\033[1;32m✅ Auto-clean logs ENABLED\033[0m"
             fi
             echo -e "\033[1;33m💡 Setting will take effect on next startup.\033[0m"
+            echo ""
+            # Save the updated setting to file
+            save_settings
             ;;
         * )
             echo -e "\033[1;33m❌ Setting unchanged.\033[0m"
@@ -595,6 +625,10 @@ display_menu() {
 
 # Main program loop
 main() {
+    # Load settings from file at startup
+    load_settings
+    echo ""
+    
     while true; do
         display_menu
         read choice
