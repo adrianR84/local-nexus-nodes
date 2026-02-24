@@ -24,6 +24,12 @@ AUTO_CLEAN_LOGS=true
 
 # Reusable functions for common operations
 
+# Function to check if specific node is already running
+check_node_running() {
+    local node_id=$1
+    ps aux | grep "nexus-network start" | grep -v grep | grep -q "nexus-network start.*--node-id $node_id"
+}
+
 # Function to check if logs directory and files exist
 check_logs_status() {
     local check_type=$1  # "directory" or "files"
@@ -135,13 +141,20 @@ launch_nexus_processes() {
     
     for ((i=0; i<$end_index; i++)); do
         node_id=${node_ids[$i]}
-        echo -e "\033[1;36m📋 Starting Node $node_id...\033[0m"
         
-        # Start nexus-network in background with nohup, redirecting output to log file
-        nohup nexus-network start --headless --node-id "$node_id" > "logs/nexus_node_$node_id.log" 2>&1 &
-        
-        # Add a small delay to prevent overwhelming the system
-        sleep 1
+        # Check if this specific node is already running
+        if check_node_running "$node_id"; then
+            echo -e "\033[1;33m⚠️  Node $node_id is already running! Skipping...\033[0m"
+            echo -e "\033[1;36m� Tip: Use option 0 to stop all processes first.\033[0m"
+        else
+            echo -e "\033[1;36m�📋 Starting Node $node_id...\033[0m"
+            
+            # Start nexus-network in background with nohup, redirecting output to log file
+            nohup nexus-network start --headless --node-id "$node_id" > "logs/nexus_node_$node_id.log" 2>&1 &
+            
+            # Add a small delay to prevent overwhelming the system
+            sleep 1
+        fi
     done
     
     echo ""
