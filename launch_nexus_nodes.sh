@@ -496,6 +496,82 @@ check_running_processes() {
     echo ""
 }
 
+# Function to display settings menu
+display_settings_menu() {
+    clear
+    echo "=========================================="
+    echo "    Nexus Network Settings"
+    echo "=========================================="
+    echo ""
+    echo -e "\033[1;34m1.\033[0m Auto-Clean Logs: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
+    echo -e "\033[1;34m2.\033[0m Clean Up Logs (delete large files)"
+    echo -e "\033[1;34m3.\033[0m Return to Main Menu"
+    echo ""
+    echo "=========================================="
+    echo -n "Please select an option [1-3]: "
+}
+
+# Function to toggle auto-clean logs setting
+toggle_auto_clean_logs() {
+    echo "Auto-Clean Logs Setting"
+    echo "======================"
+    echo ""
+    echo -e "Current setting: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
+    echo ""
+    echo "When enabled, logs are automatically cleaned on startup."
+    echo "When disabled, logs accumulate until manually cleaned."
+    echo ""
+    echo -e "\033[1;34mToggle setting? (y/N):\033[0m"
+    read -r confirm
+    
+    case $confirm in
+        [Yy]* )
+            if [ "$AUTO_CLEAN_LOGS" = true ]; then
+                AUTO_CLEAN_LOGS=false
+                echo -e "\033[1;31m❌ Auto-clean logs DISABLED\033[0m"
+            else
+                AUTO_CLEAN_LOGS=true
+                echo -e "\033[1;32m✅ Auto-clean logs ENABLED\033[0m"
+            fi
+            echo -e "\033[1;33m💡 Setting will take effect on next startup.\033[0m"
+            ;;
+        * )
+            echo -e "\033[1;33m❌ Setting unchanged.\033[0m"
+            ;;
+    esac
+    echo ""
+}
+
+# Function to handle settings menu
+settings_menu() {
+    while true; do
+        display_settings_menu
+        read choice
+        echo ""
+        
+        case $choice in
+            1)
+                toggle_auto_clean_logs
+                echo "Press Enter to continue..."
+                read
+                ;;
+            2)
+                cleanup_logs
+                echo "Press Enter to continue..."
+                read
+                ;;
+            3)
+                break
+                ;;
+            *)
+                echo -e "\033[1;31mInvalid option! Please select 1-3.\033[0m"
+                echo "Press Enter to continue..."
+                read
+                ;;
+        esac
+    done
+}
+
 # Function to display menu
 display_menu() {
     clear
@@ -508,7 +584,7 @@ display_menu() {
     echo -e "\033[1;34m3.\033[0m Check Running Processes"
     echo -e "\033[1;34m4.\033[0m \033[1;32mReal-Time Dashboard\033[0m \033[1;33m(Live Update)\033[0m"
     echo -e "\033[1;34m5.\033[0m \033[1;35mShow Successful Submissions\033[0m \033[1;33m(from logs)\033[0m"
-    echo -e "\033[1;34m6.\033[0m \033[1;37mClean Up Logs\033[0m \033[1;33m(delete large files)\033[0m"
+    echo -e "\033[1;34m6.\033[0m Settings"
     echo -e "\033[1;34m7.\033[0m Exit"
     echo ""
     echo -e "\033[1;34m0.\033[0m \033[1;31mStop All Nexus Processes\033[0m \033[1;33m(Force Kill)\033[0m"
@@ -549,9 +625,7 @@ main() {
                 read
                 ;;
             6)
-                cleanup_logs
-                echo "Press Enter to continue..."
-                read
+                settings_menu
                 ;;
             7)
                 echo "Exiting Nexus Network Node Manager..."
