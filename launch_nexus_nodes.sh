@@ -530,7 +530,7 @@ display_settings_menu() {
     echo "    Nexus Network Settings"
     echo "=========================================="
     echo ""
-    echo -e "\033[1;34m1.\033[0m Auto-Clean Logs: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
+    echo -e "\033[1;34m1.\033[0m Auto-Clean Logs at startup: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
     echo -e "\033[1;34m2.\033[0m Clean Up Logs (delete large files)"
     echo -e "\033[1;34m3.\033[0m Return to Main Menu"
     echo ""
