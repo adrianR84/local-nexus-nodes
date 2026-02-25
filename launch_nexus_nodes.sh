@@ -100,12 +100,47 @@ unpause_node() {
     fi
 }
 
-# Function to pause all running nodes
-pause_all_nodes() {
-    echo "Pausing All Running Nodes"
-    echo "=========================="
+# Function to toggle pause/resume for all nodes
+toggle_pause_resume_all() {
+    echo "Toggle Pause/Resume All Nodes"
+    echo "=============================="
     echo ""
     
+    # Check current state of nodes
+    running_count=0
+    paused_count=0
+    stopped_count=0
+    
+    for node_id in "${node_ids[@]}"; do
+        if check_node_running "$node_id" && ! check_node_paused "$node_id"; then
+            running_count=$((running_count + 1))
+        elif check_node_paused "$node_id"; then
+            paused_count=$((paused_count + 1))
+        else
+            stopped_count=$((stopped_count + 1))
+        fi
+    done
+    
+    echo -e "\033[1;36m📊 Current Node Status:\033[0m"
+    echo -e "   Running: \033[1;32m$running_count\033[0m"
+    echo -e "   Paused:  \033[1;33m$paused_count\033[0m"
+    echo -e "   Stopped: \033[1;31m$stopped_count\033[0m"
+    echo ""
+    
+    if [ $running_count -gt 0 ]; then
+        echo -e "\033[1;33m⏸️  Pausing $running_count running nodes...\033[0m"
+        pause_all_nodes_internal
+    elif [ $paused_count -gt 0 ]; then
+        echo -e "\033[1;32m▶️  Resuming $paused_count paused nodes...\033[0m"
+        resume_all_nodes_internal
+    else
+        echo -e "\033[1;31m❌ No nodes are running or paused to toggle!\033[0m"
+        echo -e "\033[1;36m💡 Start some nodes first using option 1 or 2\033[0m"
+    fi
+}
+
+# Function to pause all running nodes (internal)
+pause_all_nodes_internal() {
     paused_count=0
     failed_count=0
     
@@ -116,10 +151,7 @@ pause_all_nodes() {
             else
                 failed_count=$((failed_count + 1))
             fi
-        else
-            echo -e "\033[1;33m⚠️  Node $node_id is not running or already paused\033[0m"
         fi
-        echo ""
     done
     
     echo "=========================================="
@@ -128,12 +160,8 @@ pause_all_nodes() {
     echo ""
 }
 
-# Function to resume all paused nodes
-resume_all_nodes() {
-    echo "Resuming All Paused Nodes"
-    echo "=========================="
-    echo ""
-    
+# Function to resume all paused nodes (internal)
+resume_all_nodes_internal() {
     resumed_count=0
     failed_count=0
     
@@ -144,10 +172,7 @@ resume_all_nodes() {
             else
                 failed_count=$((failed_count + 1))
             fi
-        else
-            echo -e "\033[1;33m⚠️  Node $node_id is not paused\033[0m"
         fi
-        echo ""
     done
     
     echo "=========================================="
@@ -714,14 +739,13 @@ display_menu() {
     echo -e "\033[1;34m4.\033[0m \033[1;32mReal-Time Dashboard\033[0m \033[1;33m(Live Update)\033[0m"
     echo -e "\033[1;34m5.\033[0m \033[1;35mShow Successful Submissions\033[0m \033[1;33m(from logs)\033[0m"
     echo -e "\033[1;34m6.\033[0m Settings"
-    echo -e "\033[1;34m7.\033[0m \033[1;33mPause All Nodes\033[0m \033[1;33m(Suspend)\033[0m"
-    echo -e "\033[1;34m8.\033[0m \033[1;32mResume All Nodes\033[0m \033[1;33m(Unpause)\033[0m"
-    echo -e "\033[1;34m9.\033[0m Exit"
+    echo -e "\033[1;34m7.\033[0m \033[1;33mToggle Pause/Resume\033[0m \033[1;33m(Smart)\033[0m"
+    echo -e "\033[1;34m8.\033[0m Exit"
     echo ""
     echo -e "\033[1;34m0.\033[0m \033[1;31mStop All Nexus Processes\033[0m \033[1;33m(Force Kill)\033[0m"
     echo ""
     echo "=========================================="
-    echo -n "Please select an option [0-9]: "
+    echo -n "Please select an option [0-8]: "
 }
 
 # Main program loop
@@ -763,16 +787,11 @@ main() {
                 settings_menu
                 ;;
             7)
-                pause_all_nodes
+                toggle_pause_resume_all
                 echo "Press Enter to continue..."
                 read
                 ;;
             8)
-                resume_all_nodes
-                echo "Press Enter to continue..."
-                read
-                ;;
-            9)
                 echo "Exiting Nexus Network Node Manager..."
                 exit 0
                 ;;
@@ -782,7 +801,7 @@ main() {
                 read
                 ;;
             *)
-                echo -e "\033[1;31mInvalid option! Please select 0-9.\033[0m"
+                echo -e "\033[1;31mInvalid option! Please select 0-8.\033[0m"
                 echo "Press Enter to continue..."
                 read
                 ;;
