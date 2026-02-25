@@ -693,12 +693,12 @@ show_successful_submissions() {
         echo -e "\033[1;36m📁 Log files location: ./logs/\033[0m"
         echo ""
         echo -e "\033[1;36m🔄 Auto-refreshing every 30 seconds...\033[0m"
-        echo -e "\033[1;33mPress 'q' to return to menu\033[0m"
+        echo -e "\033[1;33mPress 'q' or ESC to return to menu\033[0m"
         echo ""
         
-        # Use read with timeout and check for 'q' input
+        # Use read with timeout and check for 'q' or ESC input
         if read -t 30 -r -p ""; then
-            if [[ "$REPLY" =~ ^[qQ]$ ]]; then
+            if [[ "$REPLY" =~ ^[qQ]$ ]] || [ "$REPLY" = $'\e' ]; then
                 echo -e "\n\033[1;33m🔄 Returning to main menu...\033[0m"
                 break
             fi
@@ -817,13 +817,13 @@ show_realtime_dashboard() {
         display_process_info "dashboard"
         
         echo ""
-        echo -e "\033[1;36m🔄 Auto-refreshing every 3 seconds...\033[0m"
-        echo -e "\033[1;33mPress 'q' to return to menu\033[0m"
+        echo -e "\033[1;36m🔄 Auto-refreshing every 10 seconds...\033[0m"
+        echo -e "\033[1;33mPress 'q' or ESC to return to menu\033[0m"
         echo ""
         
-        # Use read with timeout and check for 'q' input
-        if read -t 3 -r -p ""; then
-            if [[ "$REPLY" =~ ^[qQ]$ ]]; then
+        # Use read with timeout and check for 'q' or ESC input
+        if read -t 10 -r -p ""; then
+            if [[ "$REPLY" =~ ^[qQ]$ ]] || [ "$REPLY" = $'\e' ]; then
                 echo -e "\n\033[1;33m🔄 Returning to main menu...\033[0m"
                 break
             fi
@@ -1135,21 +1135,30 @@ main() {
             case $choice in
             1)
                 launch_nexus_processes "all"
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
                 CACHE_VALID=false  # Invalidate cache to refresh menu
-                sleep 10
+                if read -t 10 -r -p ""; then
+                    # User pressed Enter before timeout, return immediately
+                    echo ""
+                fi
                 ;;
             2)
                 launch_nexus_processes "half"
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
                 CACHE_VALID=false  # Invalidate cache to refresh menu
-                sleep 10
+                if read -t 10 -r -p ""; then
+                    # User pressed Enter before timeout, return immediately
+                    echo ""
+                fi
                 ;;
             3)
                 check_running_processes
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
                 CACHE_VALID=false  # Invalidate cache to refresh menu
-                sleep 10
+                if read -t 10 -r -p ""; then
+                    # User pressed Enter before timeout, return immediately
+                    echo ""
+                fi
                 ;;
             4)
                 show_realtime_dashboard
@@ -1164,9 +1173,12 @@ main() {
                 ;;
             7)
                 toggle_pause_resume_all
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
                 CACHE_VALID=false  # Invalidate cache to refresh menu
-                sleep 10
+                if read -t 10 -r -p ""; then
+                    # User pressed Enter before timeout, return immediately
+                    echo ""
+                fi
                 ;;
             0)
                 stop_all_nexus_processes
