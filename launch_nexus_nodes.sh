@@ -26,6 +26,27 @@ AUTO_CLEAN_LOGS=true
 # Settings file path
 SETTINGS_FILE="settings.conf"
 
+# Global variables for tracking node states (cached for efficiency)
+CACHED_RUNNING_COUNT=0
+CACHED_PAUSED_COUNT=0
+CACHE_VALID=false
+
+# Function to update cached node state counts
+update_node_state_cache() {
+    CACHED_RUNNING_COUNT=0
+    CACHED_PAUSED_COUNT=0
+    
+    for node_id in "${node_ids[@]}"; do
+        if check_node_running "$node_id" && ! check_node_paused "$node_id"; then
+            CACHED_RUNNING_COUNT=$((CACHED_RUNNING_COUNT + 1))
+        elif check_node_paused "$node_id"; then
+            CACHED_PAUSED_COUNT=$((CACHED_PAUSED_COUNT + 1))
+        fi
+    done
+    
+    CACHE_VALID=true
+}
+
 # Function to load settings from file
 load_settings() {
     if [ -f "$SETTINGS_FILE" ]; then
@@ -51,16 +72,18 @@ EOF
 
 # Reusable functions for common operations
 
-# Function to check if specific node is already running
+# Function to check if specific node is already running (not paused)
 check_node_running() {
     local node_id=$1
-    ps aux | grep "nexus-network start" | grep -v grep | grep -q "nexus-network start.*--node-id $node_id"
+    # Check if process exists and is NOT in "T" (stopped) state
+    ps aux | grep "nexus-network.*--node-id $node_id" | grep -v grep | grep -v "T" | grep -q "."
 }
 
 # Function to check if specific node is paused
 check_node_paused() {
     local node_id=$1
-    ps aux | grep "nexus-network start" | grep -v grep | grep -q "nexus-network start.*--node-id $node_id" && ps aux | grep "nexus-network start" | grep -v grep | grep -q "nexus-network start.*--node-id $node_id" && ! pgrep -f "nexus-network.*--node-id $node_id" > /dev/null 2>&1
+    # A paused process exists but is in "T" (stopped) state
+    ps aux | grep "nexus-network.*--node-id $node_id" | grep -v grep | grep -q "T"
 }
 
 # Function to pause specific node
@@ -106,33 +129,27 @@ toggle_pause_resume_all() {
     echo "=============================="
     echo ""
     
-    # Check current state of nodes
-    running_count=0
-    paused_count=0
-    stopped_count=0
-    
-    for node_id in "${node_ids[@]}"; do
-        if check_node_running "$node_id" && ! check_node_paused "$node_id"; then
-            running_count=$((running_count + 1))
-        elif check_node_paused "$node_id"; then
-            paused_count=$((paused_count + 1))
-        else
-            stopped_count=$((stopped_count + 1))
-        fi
-    done
+    # Use cached values - update only if cache is invalid
+    if [ "$CACHE_VALID" = false ]; then
+        update_node_state_cache
+    fi
     
     echo -e "\033[1;36m📊 Current Node Status:\033[0m"
-    echo -e "   Running: \033[1;32m$running_count\033[0m"
-    echo -e "   Paused:  \033[1;33m$paused_count\033[0m"
-    echo -e "   Stopped: \033[1;31m$stopped_count\033[0m"
+    echo -e "   Running: \033[1;32m$CACHED_RUNNING_COUNT\033[0m"
+    echo -e "   Paused:  \033[1;33m$CACHED_PAUSED_COUNT\033[0m"
+    echo -e "   Stopped: \033[1;31m$((12 - CACHED_RUNNING_COUNT - CACHED_PAUSED_COUNT))\033[0m"
     echo ""
     
-    if [ $running_count -gt 0 ]; then
-        echo -e "\033[1;33m⏸️  Pausing $running_count running nodes...\033[0m"
+    if [ $CACHED_RUNNING_COUNT -gt 0 ]; then
+        echo -e "\033[1;33m⏸️  Pausing $CACHED_RUNNING_COUNT running nodes...\033[0m"
         pause_all_nodes_internal
-    elif [ $paused_count -gt 0 ]; then
-        echo -e "\033[1;32m▶️  Resuming $paused_count paused nodes...\033[0m"
+        # Invalidate cache since state changed
+        CACHE_VALID=false
+    elif [ $CACHED_PAUSED_COUNT -gt 0 ]; then
+        echo -e "\033[1;32m▶️  Resuming $CACHED_PAUSED_COUNT paused nodes...\033[0m"
         resume_all_nodes_internal
+        # Invalidate cache since state changed
+        CACHE_VALID=false
     else
         echo -e "\033[1;31m❌ No nodes are running or paused to toggle!\033[0m"
         echo -e "\033[1;36m💡 Start some nodes first using option 1 or 2\033[0m"
@@ -237,9 +254,54 @@ get_logs_size() {
     du -sh logs 2>/dev/null | cut -f1
 }
 
+# Function to check if any nodes are paused (using cached values for efficiency)
+check_any_nodes_paused() {
+    # Update cache if not valid
+    if [ "$CACHE_VALID" = false ]; then
+        update_node_state_cache
+    fi
+    
+    # Return true if cached paused count is greater than 0
+    [ $CACHED_PAUSED_COUNT -gt 0 ]
+}
+
+# Function to show paused nodes warning
+show_paused_nodes_warning() {
+    echo -e "\033[1;33m⚠️  PAUSED NODES DETECTED!\033[0m"
+    echo ""
+    echo -e "\033[1;36m📋 You have paused nodes that need to be resumed first:\033[0m"
+    echo ""
+    
+    # Show which nodes are paused
+    paused_count=0
+    for node_id in "${node_ids[@]}"; do
+        if check_node_paused "$node_id"; then
+            echo -e "   \033[1;33m⏸️  Node $node_id is paused\033[0m"
+            paused_count=$((paused_count + 1))
+        fi
+    done
+    
+    echo ""
+    echo -e "\033[1;33m💡 To continue, please:\033[0m"
+    echo -e "   1. Choose option 7 to \033[1;32mResume All Paused Nodes\033[0m"
+    echo -e "   2. Or choose option 0 to \033[1;31mStop All Processes\033[0m"
+    echo ""
+    echo -e "\033[1;33m❌ Cannot start new nodes while others are paused.\033[0m"
+    echo ""
+}
+
 # Function to launch nexus network processes (supports all or half mode)
 launch_nexus_processes() {
     local mode=${1:-"all"}  # Default to "all" if no parameter
+    
+    # Check if any nodes are paused first
+    if check_any_nodes_paused; then
+        show_paused_nodes_warning
+        echo "Press Enter to continue..."
+        read
+        return
+    fi
+    
     mkdir -p logs
     
     # Auto-clean logs if setting is true
@@ -323,9 +385,12 @@ launch_nexus_processes() {
         # Check if this specific node is already running
         if check_node_running "$node_id"; then
             echo -e "\033[1;33m⚠️  Node $node_id is already running! Skipping...\033[0m"
-            echo -e "\033[1;36m� Tip: Use option 0 to stop all processes first.\033[0m"
+            echo -e "\033[1;36m💡 Tip: Use option 0 to stop all processes first.\033[0m"
+        elif check_node_paused "$node_id"; then
+            echo -e "\033[1;33m⏸️  Node $node_id is currently paused! Skipping...\033[0m"
+            echo -e "\033[1;36m💡 Tip: Use option 7 to resume paused nodes.\033[0m"
         else
-            echo -e "\033[1;36m�� Starting Node $node_id...\033[0m"
+            echo -e "\033[1;36m📋 Starting Node $node_id...\033[0m"
             
             # Start nexus-network in background with nohup, redirecting output to log file
             nohup nexus-network start --headless --node-id "$node_id" > "logs/nexus_node_$node_id.log" 2>&1 &
@@ -336,10 +401,37 @@ launch_nexus_processes() {
     done
     
     echo ""
+    # Count actual started nodes vs skipped nodes
+    started_count=0
+    skipped_running=0
+    skipped_paused=0
+    
+    for ((i=0; i<$end_index; i++)); do
+        node_id=${node_ids[$i]}
+        if check_node_running "$node_id"; then
+            skipped_running=$((skipped_running + 1))
+        elif check_node_paused "$node_id"; then
+            skipped_paused=$((skipped_paused + 1))
+        else
+            started_count=$((started_count + 1))
+        fi
+    done
+    
     if [ "$mode" = "half" ]; then
-        echo -e "\033[1;32m✅ Resource-Saving Mode: $nodes_to_launch nodes started successfully!\033[0m"
+        echo -e "\033[1;32m✅ Resource-Saving Mode Launch Complete:\033[0m"
     else
-        echo -e "\033[1;32m✅ All $nodes_to_launch nodes started successfully!\033[0m"
+        echo -e "\033[1;32m✅ All Nodes Launch Complete:\033[0m"
+    fi
+    
+    echo -e "   Started: \033[1;32m$started_count\033[0m new nodes"
+    if [ $skipped_running -gt 0 ]; then
+        echo -e "   Skipped: \033[1;33m$skipped_running\033[0m already running"
+    fi
+    if [ $skipped_paused -gt 0 ]; then
+        echo -e "   Skipped: \033[1;33m$skipped_paused\033[0m paused nodes"
+    fi
+    
+    if [ $started_count -gt 0 ]; then
         echo "Logs are being saved in 'logs' directory."
         if [ "$AUTO_CLEAN_LOGS" = true ]; then
             echo -e "\033[1;33m💡 Auto-cleanup is enabled - logs will be cleaned on next start.\033[0m"
@@ -347,8 +439,12 @@ launch_nexus_processes() {
             echo -e "\033[1;32m💡 Auto-cleanup is disabled - logs will accumulate.\033[0m"
         fi
     fi
+    
     echo -e "\033[1;33m$tip_msg\033[0m"
     echo ""
+    
+    # Invalidate cache since node states may have changed
+    CACHE_VALID=false
 }
 
 # Function to stop all nexus processes
@@ -394,6 +490,8 @@ stop_all_nexus_processes() {
             
             if [ "$remaining_processes" -eq 0 ]; then
                 echo -e "\033[1;32m✓ All Nexus Network processes stopped successfully!\033[0m"
+                # Invalidate cache since all nodes are now stopped
+                CACHE_VALID=false
             else
                 echo -e "\033[1;33m⚠ Some processes may still be running. Trying force kill...\033[0m"
                 pkill -9 -f "nexus-network start"
@@ -401,6 +499,8 @@ stop_all_nexus_processes() {
                 remaining_processes=$(ps aux | grep "nexus-network start" | grep -v grep | wc -l)
                 if [ "$remaining_processes" -eq 0 ]; then
                     echo -e "\033[1;32m✓ All processes force-killed!\033[0m"
+                    # Invalidate cache since all nodes are now stopped
+                    CACHE_VALID=false
                 else
                     echo -e "\033[1;31m⚠ $remaining_processes processes still running. You may need to kill them manually.\033[0m"
                 fi
@@ -545,9 +645,12 @@ show_successful_submissions() {
 display_process_info() {
     local show_header=$1
     
-    processes=$(ps aux | grep "nexus-network start" | grep -v grep)
+    # Get only running processes (exclude paused ones with "T" state)
+    running_processes=$(ps aux | grep "nexus-network.*--node-id" | grep -v grep | grep -v "T")
+    # Get paused processes (those with "T" state)
+    paused_processes=$(ps aux | grep "nexus-network.*--node-id" | grep -v grep | grep "T")
     
-    if [ -z "$processes" ]; then
+    if [ -z "$running_processes" ] && [ -z "$paused_processes" ]; then
         echo -e "\033[1;31m❌ No Nexus Network processes are currently running.\033[0m"
         if [ "$show_header" = "dashboard" ]; then
             echo ""
@@ -555,56 +658,83 @@ display_process_info() {
         fi
         return 1
     else
-        if [ "$show_header" = "dashboard" ]; then
-            echo -e "\033[1;32m✅ Running Nexus Network Processes:\033[0m"
-        else
-            echo -e "\033[1;32m✅ Running processes with CPU and Memory usage:\033[0m"
-        fi
-        echo ""
-        echo -e "\033[1;36mUSER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\033[0m"
-        
-        # Color code each process based on CPU usage
-        echo "$processes" | while read line; do
-            cpu_usage=$(echo "$line" | awk '{print $3}')
-            if (( $(echo "$cpu_usage > 50" | bc -l) )); then
-                # High CPU usage - Red
-                echo -e "\033[1;31m$line\033[0m"
-            elif (( $(echo "$cpu_usage > 20" | bc -l) )); then
-                # Medium CPU usage - Yellow
-                echo -e "\033[1;33m$line\033[0m"
+        # Display running processes
+        if [ -n "$running_processes" ]; then
+            if [ "$show_header" = "dashboard" ]; then
+                echo -e "\033[1;32m✅ Running Nexus Network Processes:\033[0m"
             else
-                # Low CPU usage - Green
-                echo -e "\033[1;32m$line\033[0m"
+                echo -e "\033[1;32m✅ Running processes with CPU and Memory usage:\033[0m"
             fi
-        done
+            echo ""
+            echo -e "\033[1;36mUSER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\033[0m"
+            
+            # Color code each process based on CPU usage
+            echo "$running_processes" | while read line; do
+                cpu_usage=$(echo "$line" | awk '{print $3}')
+                if (( $(echo "$cpu_usage > 50" | bc -l) )); then
+                    # High CPU usage - Red
+                    echo -e "\033[1;31m$line\033[0m"
+                elif (( $(echo "$cpu_usage > 20" | bc -l) )); then
+                    # Medium CPU usage - Yellow
+                    echo -e "\033[1;33m$line\033[0m"
+                else
+                    # Normal CPU usage - Green
+                    echo -e "\033[1;32m$line\033[0m"
+                fi
+            done
+        fi
         
+        # Display paused processes
+        if [ -n "$paused_processes" ]; then
+            if [ -n "$running_processes" ]; then
+                echo ""
+            fi
+            echo -e "\033[1;33m⏸️  Paused Nexus Network Processes:\033[0m"
+            echo ""
+            echo -e "\033[1;36mUSER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\033[0m"
+            
+            # Show paused processes in yellow/orange
+            echo "$paused_processes" | while read line; do
+                echo -e "\033[1;33m$line\033[0m"
+            done
+        fi
+    fi
+    
+    # Show statistics if there are any processes
+    if [ -n "$running_processes" ] || [ -n "$paused_processes" ]; then
         echo ""
-        process_count=$(echo "$processes" | wc -l)
+        
+        # Count total processes
+        running_count=$(echo "$running_processes" | wc -l)
+        paused_count=$(echo "$paused_processes" | wc -l)
+        total_count=$((running_count + paused_count))
+        
         if [ "$show_header" = "dashboard" ]; then
             echo -e "\033[1;36m📊 Statistics:\033[0m"
-            echo -e "   Total processes: \033[1;34m$process_count\033[0m"
+            echo -e "   Running processes: \033[1;32m$running_count\033[0m"
+            if [ $paused_count -gt 0 ]; then
+                echo -e "   Paused processes: \033[1;33m$paused_count\033[0m"
+            fi
+            echo -e "   Total processes: \033[1;34m$total_count\033[0m"
         else
-            echo -e "\033[1;36m📊 Total processes running: \033[1;34m$process_count\033[0m"
+            echo -e "\033[1;36m📊 Process Summary:\033[0m"
+            echo -e "   Running: \033[1;32m$running_count\033[0m"
+            if [ $paused_count -gt 0 ]; then
+                echo -e "   Paused: \033[1;33m$paused_count\033[0m"
+            fi
+            echo -e "   Total: \033[1;34m$total_count\033[0m"
         fi
         
-        # Show total CPU usage with color
-        total_cpu=$(echo "$processes" | awk '{sum += $3} END {printf "%.1f", sum}')
-        if (( $(echo "$total_cpu > 100" | bc -l) )); then
-            echo -e "   \033[1;31m⚠️  High CPU usage: ${total_cpu}%\033[0m"
-        elif (( $(echo "$total_cpu > 50" | bc -l) )); then
-            echo -e "   \033[1;33m⚠️  Moderate CPU usage: ${total_cpu}%\033[0m"
-        else
-            echo -e "   \033[1;32m✅ Low CPU usage: ${total_cpu}%\033[0m"
-        fi
-        
-        # Show total Memory usage with color
-        total_mem=$(echo "$processes" | awk '{sum += $4} END {printf "%.1f", sum}')
-        if (( $(echo "$total_mem > 50" | bc -l) )); then
-            echo -e "   \033[1;31m⚠️  High Memory usage: ${total_mem}%\033[0m"
-        elif (( $(echo "$total_mem > 20" | bc -l) )); then
-            echo -e "   \033[1;33m⚠️  Moderate Memory usage: ${total_mem}%\033[0m"
-        else
-            echo -e "   \033[1;32m✅ Low Memory usage: ${total_mem}%\033[0m"
+        # Show total CPU usage for running processes only
+        if [ -n "$running_processes" ]; then
+            total_cpu=$(echo "$running_processes" | awk '{sum += $3} END {printf "%.1f", sum}')
+            if (( $(echo "$total_cpu > 100" | bc -l) )); then
+                echo -e "   \033[1;31m⚠️  High CPU usage: ${total_cpu}%\033[0m"
+            elif (( $(echo "$total_cpu > 50" | bc -l) )); then
+                echo -e "   \033[1;33m⚠️  Moderate CPU usage: ${total_cpu}%\033[0m"
+            else
+                echo -e "   \033[1;32m✅ Normal CPU usage: ${total_cpu}%\033[0m"
+            fi
         fi
         return 0
     fi
@@ -726,6 +856,22 @@ settings_menu() {
     done
 }
 
+# Function to get current pause/resume menu text (using cached values for efficiency)
+get_pause_resume_menu_text() {
+    # Update cache if not valid
+    if [ "$CACHE_VALID" = false ]; then
+        update_node_state_cache
+    fi
+    
+    if [ $CACHED_RUNNING_COUNT -gt 0 ]; then
+        echo -e "\033[1;34m7.\033[0m \033[1;33mPause All Nodes\033[0m \033[1;33m($CACHED_RUNNING_COUNT running)\033[0m"
+    elif [ $CACHED_PAUSED_COUNT -gt 0 ]; then
+        echo -e "\033[1;34m7.\033[0m \033[1;32mResume All Nodes\033[0m \033[1;33m($CACHED_PAUSED_COUNT paused)\033[0m"
+    else
+        echo -e "\033[1;34m7.\033[0m \033[1;37mPause/Resume Nodes\033[0m \033[1;33m(No active nodes)\033[0m"
+    fi
+}
+
 # Function to display menu
 display_menu() {
     clear
@@ -739,7 +885,7 @@ display_menu() {
     echo -e "\033[1;34m4.\033[0m \033[1;32mReal-Time Dashboard\033[0m \033[1;33m(Live Update)\033[0m"
     echo -e "\033[1;34m5.\033[0m \033[1;35mShow Successful Submissions\033[0m \033[1;33m(from logs)\033[0m"
     echo -e "\033[1;34m6.\033[0m Settings"
-    echo -e "\033[1;34m7.\033[0m \033[1;33mToggle Pause/Resume\033[0m \033[1;33m(Smart)\033[0m"
+    get_pause_resume_menu_text
     echo -e "\033[1;34m8.\033[0m Exit"
     echo ""
     echo -e "\033[1;34m0.\033[0m \033[1;31mStop All Nexus Processes\033[0m \033[1;33m(Force Kill)\033[0m"
@@ -753,6 +899,9 @@ main() {
     # Load settings from file at startup
     load_settings
     echo ""
+    
+    # Initialize node state cache
+    update_node_state_cache
     
     while true; do
         display_menu
