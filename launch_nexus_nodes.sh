@@ -1135,18 +1135,21 @@ main() {
             case $choice in
             1)
                 launch_nexus_processes "all"
-                echo "Press Enter to continue..."
-                read
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                CACHE_VALID=false  # Invalidate cache to refresh menu
+                sleep 10
                 ;;
             2)
                 launch_nexus_processes "half"
-                echo "Press Enter to continue..."
-                read
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                CACHE_VALID=false  # Invalidate cache to refresh menu
+                sleep 10
                 ;;
             3)
                 check_running_processes
-                echo "Press Enter to continue..."
-                read
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                CACHE_VALID=false  # Invalidate cache to refresh menu
+                sleep 10
                 ;;
             4)
                 show_realtime_dashboard
@@ -1161,8 +1164,9 @@ main() {
                 ;;
             7)
                 toggle_pause_resume_all
-                echo "Press Enter to continue..."
-                read
+                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds...\033[0m"
+                CACHE_VALID=false  # Invalidate cache to refresh menu
+                sleep 10
                 ;;
             0)
                 stop_all_nexus_processes
