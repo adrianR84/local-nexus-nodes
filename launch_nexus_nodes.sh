@@ -19,9 +19,9 @@ node_ids=(
     "36680912"
 )
 
-# Setting: Auto-clean logs on startup (default: true)
-# Will be loaded from settings file if it exists
-AUTO_CLEAN_LOGS=true
+# Setting: Auto-clean logs on startup (loaded from settings file)
+# Default will be used if settings file doesn't exist
+AUTO_CLEAN_LOGS=false
 
 # Settings file path
 SETTINGS_FILE="settings.conf"
@@ -37,7 +37,7 @@ update_node_state_cache() {
     CACHED_PAUSED_COUNT=0
     
     for node_id in "${node_ids[@]}"; do
-        if check_node_running "$node_id" && ! check_node_paused "$node_id"; then
+        if check_node_running "$node_id"; then
             CACHED_RUNNING_COUNT=$((CACHED_RUNNING_COUNT + 1))
         elif check_node_paused "$node_id"; then
             CACHED_PAUSED_COUNT=$((CACHED_PAUSED_COUNT + 1))
@@ -162,7 +162,7 @@ pause_all_nodes_internal() {
     failed_count=0
     
     for node_id in "${node_ids[@]}"; do
-        if check_node_running "$node_id" && ! check_node_paused "$node_id"; then
+        if check_node_running "$node_id"; then
             if pause_node "$node_id"; then
                 paused_count=$((paused_count + 1))
             else
@@ -256,11 +256,6 @@ get_logs_size() {
 
 # Function to check if any nodes are paused (using cached values for efficiency)
 check_any_nodes_paused() {
-    # Update cache if not valid
-    if [ "$CACHE_VALID" = false ]; then
-        update_node_state_cache
-    fi
-    
     # Return true if cached paused count is greater than 0
     [ $CACHED_PAUSED_COUNT -gt 0 ]
 }
@@ -858,11 +853,6 @@ settings_menu() {
 
 # Function to get current pause/resume menu text (using cached values for efficiency)
 get_pause_resume_menu_text() {
-    # Update cache if not valid
-    if [ "$CACHE_VALID" = false ]; then
-        update_node_state_cache
-    fi
-    
     if [ $CACHED_RUNNING_COUNT -gt 0 ]; then
         echo -e "\033[1;34m7.\033[0m \033[1;33mPause All Nodes\033[0m \033[1;33m($CACHED_RUNNING_COUNT running)\033[0m"
     elif [ $CACHED_PAUSED_COUNT -gt 0 ]; then
