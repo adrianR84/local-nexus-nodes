@@ -93,7 +93,7 @@ auto_start_on_inactivity() {
     if [ $CACHED_PAUSED_COUNT -gt 0 ]; then
         echo -e "\033[1;32m▶️  Auto-resuming $CACHED_PAUSED_COUNT paused nodes...\033[0m"
         resume_all_nodes_internal
-        CACHE_VALID=false
+        invalidate_cache_and_refresh
     elif [ $CACHED_RUNNING_COUNT -eq 0 ]; then
         echo -e "\033[1;32m📋 Auto-starting all nodes (none running)...\033[0m"
         launch_nexus_processes "all"
@@ -225,13 +225,11 @@ toggle_pause_resume_all() {
     if [ $CACHED_RUNNING_COUNT -gt 0 ]; then
         echo -e "\033[1;33m⏸️  Pausing $CACHED_RUNNING_COUNT running nodes...\033[0m"
         pause_all_nodes_internal
-        # Invalidate cache since state changed
-        CACHE_VALID=false
+        invalidate_cache_and_refresh
     elif [ $CACHED_PAUSED_COUNT -gt 0 ]; then
         echo -e "\033[1;32m▶️  Resuming $CACHED_PAUSED_COUNT paused nodes...\033[0m"
         resume_all_nodes_internal
-        # Invalidate cache since state changed
-        CACHE_VALID=false
+        invalidate_cache_and_refresh
     else
         echo -e "\033[1;31m❌ No nodes are running or paused to toggle!\033[0m"
         echo -e "\033[1;36m💡 Start some nodes first using option 1 or 2\033[0m"
@@ -554,8 +552,7 @@ stop_all_nexus_processes() {
             
             if [ "$remaining_processes" -eq 0 ]; then
                 echo -e "\033[1;32m✓ All Nexus Network processes stopped successfully!\033[0m"
-                # Invalidate cache since all nodes are now stopped
-                CACHE_VALID=false
+                invalidate_cache_and_refresh
             else
                 echo -e "\033[1;33m⚠ Some processes may still be running. Trying force kill...\033[0m"
                 pkill -9 -f "nexus-network start"
@@ -563,8 +560,7 @@ stop_all_nexus_processes() {
                 remaining_processes=$(ps aux | grep "nexus-network start" | grep -v grep | wc -l)
                 if [ "$remaining_processes" -eq 0 ]; then
                     echo -e "\033[1;32m✓ All processes force-killed!\033[0m"
-                    # Invalidate cache since all nodes are now stopped
-                    CACHE_VALID=false
+                    invalidate_cache_and_refresh
                 else
                     echo -e "\033[1;31m⚠ $remaining_processes processes still running. You may need to kill them manually.\033[0m"
                 fi
@@ -822,7 +818,7 @@ show_realtime_dashboard() {
         echo ""
         
         # Use read with timeout and check for 'q' or ESC input
-        if read -t 10 -r -p ""; then
+        if read -t 30 -r -p ""; then
             if [[ "$REPLY" =~ ^[qQ]$ ]] || [ "$REPLY" = $'\e' ]; then
                 echo -e "\n\033[1;33m🔄 Returning to main menu...\033[0m"
                 break
@@ -1064,6 +1060,21 @@ get_auto_start_countdown() {
     fi
 }
 
+# Function to invalidate cache and refresh menu
+invalidate_cache_and_refresh() {
+    CACHE_VALID=false
+}
+
+# Function to handle automatic return with manual override
+auto_return_to_menu() {
+    echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
+    invalidate_cache_and_refresh
+    if read -t 10 -r -p ""; then
+        # User pressed Enter before timeout, return immediately
+        echo ""
+    fi
+}
+
 # Function to display menu
 display_menu() {
     clear
@@ -1114,8 +1125,7 @@ main() {
         # Check for inactivity before displaying menu
         if check_inactivity; then
             auto_start_on_inactivity
-            # Invalidate cache after auto-start to refresh menu
-            CACHE_VALID=false
+            invalidate_cache_and_refresh
         fi
         
         display_menu
@@ -1135,30 +1145,15 @@ main() {
             case $choice in
             1)
                 launch_nexus_processes "all"
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
-                CACHE_VALID=false  # Invalidate cache to refresh menu
-                if read -t 10 -r -p ""; then
-                    # User pressed Enter before timeout, return immediately
-                    echo ""
-                fi
+                auto_return_to_menu
                 ;;
             2)
                 launch_nexus_processes "half"
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
-                CACHE_VALID=false  # Invalidate cache to refresh menu
-                if read -t 10 -r -p ""; then
-                    # User pressed Enter before timeout, return immediately
-                    echo ""
-                fi
+                auto_return_to_menu
                 ;;
             3)
                 check_running_processes
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
-                CACHE_VALID=false  # Invalidate cache to refresh menu
-                if read -t 10 -r -p ""; then
-                    # User pressed Enter before timeout, return immediately
-                    echo ""
-                fi
+                auto_return_to_menu
                 ;;
             4)
                 show_realtime_dashboard
@@ -1173,12 +1168,7 @@ main() {
                 ;;
             7)
                 toggle_pause_resume_all
-                echo -e "\033[1;36m📋 Returning to main menu in 10 seconds... (or press Enter to return now)\033[0m"
-                CACHE_VALID=false  # Invalidate cache to refresh menu
-                if read -t 10 -r -p ""; then
-                    # User pressed Enter before timeout, return immediately
-                    echo ""
-                fi
+                auto_return_to_menu
                 ;;
             0)
                 stop_all_nexus_processes
