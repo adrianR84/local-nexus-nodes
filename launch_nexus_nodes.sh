@@ -23,6 +23,11 @@ node_ids=(
 # Default will be used if settings file doesn't exist
 AUTO_CLEAN_LOGS=false
 
+# Setting: Auto start on inactivity (minutes)
+# Will automatically start/resume nodes if inactive for specified time
+AUTO_START_INACTIVITY=true
+INACTIVITY_TIMEOUT=1  # minutes
+
 # Settings file path
 SETTINGS_FILE="settings.conf"
 
@@ -30,6 +35,77 @@ SETTINGS_FILE="settings.conf"
 CACHED_RUNNING_COUNT=0
 CACHED_PAUSED_COUNT=0
 CACHE_VALID=false
+
+# Function to get last activity time from logs
+get_last_activity_time() {
+    local latest_time=0
+    
+    for log_file in logs/nexus_node_*.log; do
+        if [ -f "$log_file" ]; then
+            # Get the last modification time of the log file
+            file_time=$(stat -c %Y "$log_file" 2>/dev/null)
+            if [ "$file_time" -gt "$latest_time" ]; then
+                latest_time=$file_time
+            fi
+        fi
+    done
+    
+    echo $latest_time
+}
+
+# Function to check if nodes have been inactive
+check_inactivity() {
+    if [ "$AUTO_START_INACTIVITY" = false ]; then
+        return 1  # Feature disabled
+    fi
+    
+    # Get current time and last activity time
+    current_time=$(date +%s)
+    last_activity=$(get_last_activity_time)
+    
+    if [ "$last_activity" -eq 0 ]; then
+        return 0  # No activity found, treat as inactive
+    fi
+    
+    # Calculate minutes since last activity
+    inactive_minutes=$(( (current_time - last_activity) / 60 ))
+    
+    if [ "$inactive_minutes" -ge "$INACTIVITY_TIMEOUT" ]; then
+        echo -e "\033[1;33m⏰ Inactivity detected: $inactive_minutes minutes since last activity\033[0m"
+        return 0  # Inactive
+    else
+        return 1  # Active
+    fi
+}
+
+# Function to auto-start on inactivity
+auto_start_on_inactivity() {
+    if ! check_inactivity; then
+        return 0  # No inactivity, nothing to do
+    fi
+    
+    echo -e "\033[1;33m🚀 Auto-starting nodes due to inactivity...\033[0m"
+    echo ""
+    
+    # Update cache first
+    update_node_state_cache
+    
+    if [ $CACHED_PAUSED_COUNT -gt 0 ]; then
+        echo -e "\033[1;32m▶️  Auto-resuming $CACHED_PAUSED_COUNT paused nodes...\033[0m"
+        resume_all_nodes_internal
+        CACHE_VALID=false
+    elif [ $CACHED_RUNNING_COUNT -eq 0 ]; then
+        echo -e "\033[1;32m📋 Auto-starting all nodes (none running)...\033[0m"
+        launch_nexus_processes "all"
+    else
+        echo -e "\033[1;36mℹ️  Nodes already running, no action needed\033[0m"
+    fi
+    
+    echo ""
+    echo -e "\033[1;32m✅ Auto-start completed!\033[0m"
+    echo "Press Enter to continue..."
+    read
+}
 
 # Function to update cached node state counts
 update_node_state_cache() {
@@ -60,12 +136,18 @@ load_settings() {
 
 # Function to save settings to file
 save_settings() {
-    cat > "$SETTINGS_FILE" << EOF
+    cat > "$SETTINGS_FILE" <<EOF
 # Nexus Network Node Manager Settings
 # Generated automatically - do not edit manually
 
 # Auto-clean logs on startup (true/false)
 AUTO_CLEAN_LOGS=$AUTO_CLEAN_LOGS
+
+# Auto start on inactivity (true/false)
+AUTO_START_INACTIVITY=$AUTO_START_INACTIVITY
+
+# Inactivity timeout in minutes
+INACTIVITY_TIMEOUT=$INACTIVITY_TIMEOUT
 EOF
     echo -e "\033[1;32m✅ Settings saved to $SETTINGS_FILE\033[0m"
 }
@@ -264,18 +346,7 @@ check_any_nodes_paused() {
 show_paused_nodes_warning() {
     echo -e "\033[1;33m⚠️  PAUSED NODES DETECTED!\033[0m"
     echo ""
-    echo -e "\033[1;36m📋 You have paused nodes that need to be resumed first:\033[0m"
-    echo ""
-    
-    # Show which nodes are paused
-    paused_count=0
-    for node_id in "${node_ids[@]}"; do
-        if check_node_paused "$node_id"; then
-            echo -e "   \033[1;33m⏸️  Node $node_id is paused\033[0m"
-            paused_count=$((paused_count + 1))
-        fi
-    done
-    
+    echo -e "\033[1;36m📋 Nodes are paused. Use option 7 to resume them first.\033[0m"
     echo ""
     echo -e "\033[1;33m💡 To continue, please:\033[0m"
     echo -e "   1. Choose option 7 to \033[1;32mResume All Paused Nodes\033[0m"
@@ -381,9 +452,7 @@ launch_nexus_processes() {
         if check_node_running "$node_id"; then
             echo -e "\033[1;33m⚠️  Node $node_id is already running! Skipping...\033[0m"
             echo -e "\033[1;36m💡 Tip: Use option 0 to stop all processes first.\033[0m"
-        elif check_node_paused "$node_id"; then
-            echo -e "\033[1;33m⏸️  Node $node_id is currently paused! Skipping...\033[0m"
-            echo -e "\033[1;36m💡 Tip: Use option 7 to resume paused nodes.\033[0m"
+
         else
             echo -e "\033[1;36m📋 Starting Node $node_id...\033[0m"
             
@@ -780,11 +849,99 @@ display_settings_menu() {
     echo "=========================================="
     echo ""
     echo -e "\033[1;34m1.\033[0m Auto-Clean Logs at startup: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
-    echo -e "\033[1;34m2.\033[0m Clean Up Logs (delete large files)"
-    echo -e "\033[1;34m3.\033[0m Return to Main Menu"
+    echo -e "\033[1;34m2.\033[0m Auto-Start on Inactivity: \033[1;33m$AUTO_START_INACTIVITY\033[0m (\033[1;36m$INACTIVITY_TIMEOUT minutes\033[0m)"
+    echo -e "\033[1;34m3.\033[0m Clean Up Logs (delete large files)"
+    echo -e "\033[1;34m4.\033[0m Return to Main Menu"
     echo ""
     echo "=========================================="
-    echo -n "Please select an option [1-3]: "
+    echo -n "Please select an option [1-4]: "
+}
+
+# Function to toggle auto-start inactivity setting
+toggle_auto_start_inactivity() {
+    echo "Auto-Start on Inactivity Setting"
+    echo "================================="
+    echo ""
+    echo -e "Current setting: \033[1;33m$AUTO_START_INACTIVITY\033[0m"
+    echo -e "Current timeout: \033[1;36m$INACTIVITY_TIMEOUT minutes\033[0m"
+    echo ""
+    echo "When enabled, nodes will automatically start/resume if inactive for the specified time."
+    echo "This helps ensure your nodes are always working and earning rewards."
+    echo ""
+    
+    if [ "$AUTO_START_INACTIVITY" = true ]; then
+        echo -e "\033[1;33m⚠️  Auto-start is currently ENABLED\033[0m"
+        echo ""
+        echo -e "\033[1;34mChoose new setting:\033[0m"
+        echo "1. Disable auto-start"
+        echo "2. Change timeout (current: $INACTIVITY_TIMEOUT minutes)"
+        echo "3. Cancel"
+        echo ""
+        echo -n "Please select an option [1-3]: "
+        read choice
+        
+        case $choice in
+            1)
+                AUTO_START_INACTIVITY=false
+                echo -e "\033[1;31m❌ Auto-start on inactivity DISABLED\033[0m"
+                save_settings
+                ;;
+            2)
+                echo ""
+                echo -n "Enter new timeout in minutes (5-1440): "
+                read new_timeout
+                if [[ "$new_timeout" =~ ^[0-9]+$ ]] && [ "$new_timeout" -ge 5 ] && [ "$new_timeout" -le 1440 ]; then
+                    INACTIVITY_TIMEOUT=$new_timeout
+                    echo -e "\033[1;32m✅ Timeout updated to $INACTIVITY_TIMEOUT minutes\033[0m"
+                    save_settings
+                else
+                    echo -e "\033[1;31m❌ Invalid timeout. Please enter a number between 5 and 1440.\033[0m"
+                fi
+                ;;
+            3)
+                echo -e "\033[1;33m❌ Setting unchanged\033[0m"
+                ;;
+            *)
+                echo -e "\033[1;31m❌ Invalid option\033[0m"
+                ;;
+        esac
+    else
+        echo -e "\033[1;33m⚠️  Auto-start is currently DISABLED\033[0m"
+        echo ""
+        echo -e "\033[1;34mChoose new setting:\033[0m"
+        echo "1. Enable auto-start"
+        echo "2. Change timeout (current: $INACTIVITY_TIMEOUT minutes)"
+        echo "3. Cancel"
+        echo ""
+        echo -n "Please select an option [1-3]: "
+        read choice
+        
+        case $choice in
+            1)
+                AUTO_START_INACTIVITY=true
+                echo -e "\033[1;32m✅ Auto-start on inactivity ENABLED\033[0m"
+                save_settings
+                ;;
+            2)
+                echo ""
+                echo -n "Enter new timeout in minutes (1-1440): "
+                read new_timeout
+                if [[ "$new_timeout" =~ ^[0-9]+$ ]] && [ "$new_timeout" -ge 1 ] && [ "$new_timeout" -le 1440 ]; then
+                    INACTIVITY_TIMEOUT=$new_timeout
+                    echo -e "\033[1;32m✅ Timeout updated to $INACTIVITY_TIMEOUT minutes\033[0m"
+                    save_settings
+                else
+                    echo -e "\033[1;31m❌ Invalid timeout. Please enter a number between 1 and 1440.\033[0m"
+                fi
+                ;;
+            3)
+                echo -e "\033[1;33m❌ Setting unchanged\033[0m"
+                ;;
+            *)
+                echo -e "\033[1;31m❌ Invalid option\033[0m"
+                ;;
+        esac
+    fi
 }
 
 # Function to toggle auto-clean logs setting
@@ -835,15 +992,20 @@ settings_menu() {
                 read
                 ;;
             2)
-                cleanup_logs
+                toggle_auto_start_inactivity
                 echo "Press Enter to continue..."
                 read
                 ;;
             3)
+                cleanup_logs
+                echo "Press Enter to continue..."
+                read
+                ;;
+            4)
                 break
                 ;;
             *)
-                echo -e "\033[1;31mInvalid option! Please select 1-3.\033[0m"
+                echo -e "\033[1;31mInvalid option! Please select 1-4.\033[0m"
                 echo "Press Enter to continue..."
                 read
                 ;;
@@ -853,12 +1015,52 @@ settings_menu() {
 
 # Function to get current pause/resume menu text (using cached values for efficiency)
 get_pause_resume_menu_text() {
+    # Update cache if not valid to ensure accurate menu text
+    if [ "$CACHE_VALID" = false ]; then
+        update_node_state_cache
+    fi
+    
     if [ $CACHED_RUNNING_COUNT -gt 0 ]; then
-        echo -e "\033[1;34m7.\033[0m \033[1;33mPause All Nodes\033[0m \033[1;33m($CACHED_RUNNING_COUNT running)\033[0m"
+        echo -e "\033[1;34m7.\033[0m \033[1;33mPause All Nodes\033[0m \033[1;32m($CACHED_RUNNING_COUNT running)\033[0m"
     elif [ $CACHED_PAUSED_COUNT -gt 0 ]; then
         echo -e "\033[1;34m7.\033[0m \033[1;32mResume All Nodes\033[0m \033[1;33m($CACHED_PAUSED_COUNT paused)\033[0m"
     else
         echo -e "\033[1;34m7.\033[0m \033[1;37mPause/Resume Nodes\033[0m \033[1;33m(No active nodes)\033[0m"
+    fi
+}
+
+# Function to get time remaining until auto-start
+get_auto_start_countdown() {
+    if [ "$AUTO_START_INACTIVITY" = false ]; then
+        return 0  # Feature disabled
+    fi
+    
+    # Get current time and last activity time
+    current_time=$(date +%s)
+    last_activity=$(get_last_activity_time)
+    
+    if [ "$last_activity" -eq 0 ]; then
+        echo "No activity detected"
+        return 0
+    fi
+    
+    # Calculate total seconds since last activity
+    inactive_seconds=$((current_time - last_activity))
+    timeout_seconds=$((INACTIVITY_TIMEOUT * 60))
+    remaining_seconds=$((timeout_seconds - inactive_seconds))
+    
+    if [ "$remaining_seconds" -le 0 ]; then
+        echo "Auto-starting now..."
+    elif [ "$remaining_seconds" -lt 60 ]; then
+        echo "$remaining_seconds seconds"
+    else
+        remaining_minutes=$((remaining_seconds / 60))
+        remaining_secs=$((remaining_seconds % 60))
+        if [ "$remaining_minutes" -eq 1 ]; then
+            echo "1 minute $remaining_secs seconds"
+        else
+            echo "$remaining_minutes minutes $remaining_secs seconds"
+        fi
     fi
 }
 
@@ -876,10 +1078,20 @@ display_menu() {
     echo -e "\033[1;34m5.\033[0m \033[1;35mShow Successful Submissions\033[0m \033[1;33m(from logs)\033[0m"
     echo -e "\033[1;34m6.\033[0m Settings"
     get_pause_resume_menu_text
-    echo -e "\033[1;34m8.\033[0m Exit"
+    echo -e "\033[1;34m8.\033[0m Exit \033[1;33m(or press ESC)\033[0m"
     echo ""
     echo -e "\033[1;34m0.\033[0m \033[1;31mStop All Nexus Processes\033[0m \033[1;33m(Force Kill)\033[0m"
     echo ""
+    echo "=========================================="
+    echo -e "\033[1;36m📋 Current Settings:\033[0m"
+    echo -e "   Auto-Clean Logs: \033[1;33m$AUTO_CLEAN_LOGS\033[0m | Auto-Start: \033[1;33m$AUTO_START_INACTIVITY\033[0m (\033[1;36m$INACTIVITY_TIMEOUT min\033[0m)"
+    
+    # Show auto-start countdown if nodes are paused and auto-start is enabled
+    if [ "$AUTO_START_INACTIVITY" = true ] && [ $CACHED_PAUSED_COUNT -gt 0 ]; then
+        countdown=$(get_auto_start_countdown)
+        echo -e "   \033[1;33m⏰ Auto-restart in: \033[1;31m$countdown\033[0m"
+    fi
+    
     echo "=========================================="
     echo -n "Please select an option [0-8]: "
 }
@@ -893,12 +1105,34 @@ main() {
     # Initialize node state cache
     update_node_state_cache
     
+    # Check for inactivity and auto-start if needed at startup
+    if check_inactivity; then
+        auto_start_on_inactivity
+    fi
+    
     while true; do
-        display_menu
-        read choice
-        echo ""
+        # Check for inactivity before displaying menu
+        if check_inactivity; then
+            auto_start_on_inactivity
+            # Invalidate cache after auto-start to refresh menu
+            CACHE_VALID=false
+        fi
         
-        case $choice in
+        display_menu
+        
+        # Add a timeout to read command to allow periodic checking
+        # This will check for input every 5 seconds
+        if read -s -n 1 -t 5 choice 2>/dev/null; then
+            echo ""
+            
+            # Check for ESC key (ASCII 27) or '8' for exit
+            if [ "$choice" = $'\e' ] || [ "$choice" = "8" ]; then
+                echo -e "\033[1;32m👋 Exiting Nexus Network Node Manager. Goodbye!\033[0m"
+                exit 0
+            fi
+            
+            # Process the choice if input was received
+            case $choice in
             1)
                 launch_nexus_processes "all"
                 echo "Press Enter to continue..."
@@ -930,21 +1164,21 @@ main() {
                 echo "Press Enter to continue..."
                 read
                 ;;
-            8)
-                echo "Exiting Nexus Network Node Manager..."
-                exit 0
-                ;;
             0)
                 stop_all_nexus_processes
                 echo "Press Enter to continue..."
                 read
                 ;;
             *)
-                echo -e "\033[1;31mInvalid option! Please select 0-8.\033[0m"
+                echo -e "\033[1;31mInvalid option! Please select 0-7 or ESC to exit.\033[0m"
                 echo "Press Enter to continue..."
                 read
                 ;;
         esac
+        else
+            # Read timed out (no input), continue loop to refresh menu and check inactivity
+            echo ""
+        fi
     done
 }
 
