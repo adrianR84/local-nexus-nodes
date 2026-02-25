@@ -57,6 +57,105 @@ check_node_running() {
     ps aux | grep "nexus-network start" | grep -v grep | grep -q "nexus-network start.*--node-id $node_id"
 }
 
+# Function to check if specific node is paused
+check_node_paused() {
+    local node_id=$1
+    ps aux | grep "nexus-network start" | grep -v grep | grep -q "nexus-network start.*--node-id $node_id" && ps aux | grep "nexus-network start" | grep -v grep | grep -q "nexus-network start.*--node-id $node_id" && ! pgrep -f "nexus-network.*--node-id $node_id" > /dev/null 2>&1
+}
+
+# Function to pause specific node
+pause_node() {
+    local node_id=$1
+    echo -e "\033[1;33m⏸️  Pausing Node $node_id...\033[0m"
+    
+    # Send SIGSTOP to pause the process
+    pkill -SIGSTOP -f "nexus-network.*--node-id $node_id"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "\033[1;32m✅ Node $node_id paused successfully\033[0m"
+        echo -e "\033[1;36m💡 Use 'Resume Nodes' option to unpause\033[0m"
+        return 0
+    else
+        echo -e "\033[1;31m❌ Failed to pause Node $node_id\033[0m"
+        echo -e "\033[1;33m⚠️  Node may not be running\033[0m"
+        return 1
+    fi
+}
+
+# Function to unpause specific node
+unpause_node() {
+    local node_id=$1
+    echo -e "\033[1;32m▶️  Resuming Node $node_id...\033[0m"
+    
+    # Send SIGCONT to resume the process
+    pkill -SIGCONT -f "nexus-network.*--node-id $node_id"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "\033[1;32m✅ Node $node_id resumed successfully\033[0m"
+        return 0
+    else
+        echo -e "\033[1;31m❌ Failed to resume Node $node_id\033[0m"
+        echo -e "\033[1;33m⚠️  Node may not be paused\033[0m"
+        return 1
+    fi
+}
+
+# Function to pause all running nodes
+pause_all_nodes() {
+    echo "Pausing All Running Nodes"
+    echo "=========================="
+    echo ""
+    
+    paused_count=0
+    failed_count=0
+    
+    for node_id in "${node_ids[@]}"; do
+        if check_node_running "$node_id" && ! check_node_paused "$node_id"; then
+            if pause_node "$node_id"; then
+                paused_count=$((paused_count + 1))
+            else
+                failed_count=$((failed_count + 1))
+            fi
+        else
+            echo -e "\033[1;33m⚠️  Node $node_id is not running or already paused\033[0m"
+        fi
+        echo ""
+    done
+    
+    echo "=========================================="
+    echo -e "\033[1;32m✅ Paused: $paused_count nodes\033[0m"
+    echo -e "\033[1;31m❌ Failed: $failed_count nodes\033[0m"
+    echo ""
+}
+
+# Function to resume all paused nodes
+resume_all_nodes() {
+    echo "Resuming All Paused Nodes"
+    echo "=========================="
+    echo ""
+    
+    resumed_count=0
+    failed_count=0
+    
+    for node_id in "${node_ids[@]}"; do
+        if check_node_paused "$node_id"; then
+            if unpause_node "$node_id"; then
+                resumed_count=$((resumed_count + 1))
+            else
+                failed_count=$((failed_count + 1))
+            fi
+        else
+            echo -e "\033[1;33m⚠️  Node $node_id is not paused\033[0m"
+        fi
+        echo ""
+    done
+    
+    echo "=========================================="
+    echo -e "\033[1;32m✅ Resumed: $resumed_count nodes\033[0m"
+    echo -e "\033[1;31m❌ Failed: $failed_count nodes\033[0m"
+    echo ""
+}
+
 # Function to check if logs directory and files exist
 check_logs_status() {
     local check_type=$1  # "directory" or "files"
@@ -615,12 +714,14 @@ display_menu() {
     echo -e "\033[1;34m4.\033[0m \033[1;32mReal-Time Dashboard\033[0m \033[1;33m(Live Update)\033[0m"
     echo -e "\033[1;34m5.\033[0m \033[1;35mShow Successful Submissions\033[0m \033[1;33m(from logs)\033[0m"
     echo -e "\033[1;34m6.\033[0m Settings"
-    echo -e "\033[1;34m7.\033[0m Exit"
+    echo -e "\033[1;34m7.\033[0m \033[1;33mPause All Nodes\033[0m \033[1;33m(Suspend)\033[0m"
+    echo -e "\033[1;34m8.\033[0m \033[1;32mResume All Nodes\033[0m \033[1;33m(Unpause)\033[0m"
+    echo -e "\033[1;34m9.\033[0m Exit"
     echo ""
     echo -e "\033[1;34m0.\033[0m \033[1;31mStop All Nexus Processes\033[0m \033[1;33m(Force Kill)\033[0m"
     echo ""
     echo "=========================================="
-    echo -n "Please select an option [0-7]: "
+    echo -n "Please select an option [0-9]: "
 }
 
 # Main program loop
@@ -662,6 +763,16 @@ main() {
                 settings_menu
                 ;;
             7)
+                pause_all_nodes
+                echo "Press Enter to continue..."
+                read
+                ;;
+            8)
+                resume_all_nodes
+                echo "Press Enter to continue..."
+                read
+                ;;
+            9)
                 echo "Exiting Nexus Network Node Manager..."
                 exit 0
                 ;;
@@ -671,7 +782,7 @@ main() {
                 read
                 ;;
             *)
-                echo -e "\033[1;31mInvalid option! Please select 0-7.\033[0m"
+                echo -e "\033[1;31mInvalid option! Please select 0-9.\033[0m"
                 echo "Press Enter to continue..."
                 read
                 ;;
