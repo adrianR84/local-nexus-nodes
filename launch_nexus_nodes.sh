@@ -91,6 +91,22 @@ check_inactivity_exact() {
     fi
 }
 
+# Function to get total successful submissions across all nodes
+get_total_submissions() {
+    local total_submissions=0
+    
+    # Search through all log files for successful submissions
+    for log_file in logs/nexus_node_*.log; do
+        if [ -f "$log_file" ]; then
+            submissions=$(grep -i "Proof submitted successfully for task" "$log_file" 2>/dev/null)
+            count=$(echo "$submissions" | grep -c .)
+            total_submissions=$((total_submissions + count))
+        fi
+    done
+    
+    echo $total_submissions
+}
+
 # Function to update cached node state counts
 update_node_state_cache() {
     CACHED_RUNNING_COUNT=0
@@ -430,6 +446,8 @@ show_paused_nodes_warning() {
     echo ""
     echo -e "\033[1;33m❌ Cannot start new nodes while others are paused.\033[0m"
     echo ""
+    
+    auto_return_to_menu
 }
 
 # Function to launch nexus network processes (supports all or half mode)
@@ -439,8 +457,6 @@ launch_nexus_processes() {
     # Check if any nodes are paused first
     if check_any_nodes_paused; then
         show_paused_nodes_warning
-        echo "Press Enter to continue..."
-        read
         return
     fi
     
@@ -759,7 +775,7 @@ show_successful_submissions() {
         else
             echo ""
             echo -e "\033[1;34m📊 Summary:\033[0m"
-            echo -e "   Total successful submissions across all nodes: \033[1;32m$total_submissions\033[0m"
+            echo -e "   Total successful submissions across all nodes: \033[1;32m$(get_total_submissions)\033[0m"
             echo -e "   Active nodes: \033[1;34m$(ls logs/nexus_node_*.log | wc -l)\033[0m"
         fi
         
@@ -1192,6 +1208,10 @@ display_menu() {
     echo "=========================================="
     echo -e "\033[1;36m📋 Current Settings:\033[0m"
     echo -e "   Auto-Clean Logs: \033[1;33m$AUTO_CLEAN_LOGS\033[0m | Auto-Start: \033[1;33m$AUTO_START_INACTIVITY\033[0m (\033[1;36m$INACTIVITY_TIMEOUT min\033[0m)"
+    
+    # Get and display total submissions
+    total_submissions=$(get_total_submissions)
+    echo -e "   \033[1;35m Total Successful Submissions:\033[0m \033[1;32m$total_submissions\033[0m"
     
     # Show auto-start countdown if auto-start is enabled and activation is active
     if [ "$AUTO_START_INACTIVITY" = true ]; then
