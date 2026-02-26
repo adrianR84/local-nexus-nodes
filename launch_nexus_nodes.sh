@@ -3,6 +3,13 @@
 # Nexus Network Node Launcher - Menu Version
 # This script provides a menu to manage nexus-network processes
 
+# Source resource monitoring functions
+if [ -f "resource_monitor.sh" ]; then
+    source resource_monitor.sh
+else
+    echo -e "\033[1;31mError: resource_monitor.sh not found. Resource monitoring will be unavailable.\033[0m"
+fi
+
 # Array of node IDs from the nexus.txt file
 node_ids=(
     "35835965"
@@ -1203,6 +1210,7 @@ display_menu() {
     echo -e "\033[1;34m6.\033[0m Settings"
     get_pause_resume_menu_text
     get_all_half_menu_text
+    echo -e "\033[1;34m9.\033[0m \033[1;35mSystem Resources\033[0m \033[1;33m(CPU/RAM Monitor)\033[0m"
     echo -e "\033[1;34m0.\033[0m \033[1;31mStop All Nexus Processes\033[0m \033[1;33m(Force Kill)\033[0m"
     echo ""
     echo "=========================================="
@@ -1211,7 +1219,11 @@ display_menu() {
     
     # Get and display total submissions
     total_submissions=$(get_total_submissions)
-    echo -e "   \033[1;35m Total Successful Submissions:\033[0m \033[1;32m$total_submissions\033[0m"
+    echo -e "   Total Successful Submissions: \033[1;32m$total_submissions\033[0m"
+    
+    # Get and display resource summary
+    resource_summary=$(get_resource_summary)
+    echo -e "   \033[1;35m💻 Resource Usage:\033[0m \033[1;33m$resource_summary\033[0m"
     
     # Show auto-start countdown if auto-start is enabled and activation is active
     if [ "$AUTO_START_INACTIVITY" = true ]; then
@@ -1227,7 +1239,7 @@ display_menu() {
     fi
     
     echo "=========================================="
-    echo -e "\033[1;34m9.\033[0m Exit \033[1;33m(or press ESC)\033[0m"
+    echo -e "\033[1;34mPress ESC to exit\033[0m"
     echo ""
     echo -n "Please select an option [0-9]: "
 }
@@ -1260,8 +1272,8 @@ main() {
         if read -s -n 1 -t 10 choice 2>/dev/null; then
             echo ""
             
-            # Check for ESC key (ASCII 27) or '9' for exit
-            if [ "$choice" = $'\e' ] || [ "$choice" = "9" ]; then
+            # Check for ESC key (ASCII 27) for exit
+            if [ "$choice" = $'\e' ]; then
                 echo -e "\033[1;32m👋 Exiting Nexus Network Node Manager. Goodbye!\033[0m"
                 exit 0
             fi
@@ -1291,6 +1303,9 @@ main() {
             6)
                 settings_menu
                 ;;
+            9)
+                show_system_resources
+                ;;
             7)
                 toggle_pause_resume_all
                 auto_return_to_menu
@@ -1305,7 +1320,7 @@ main() {
                 read
                 ;;
             *)
-                echo -e "\033[1;31mInvalid option! Please select 0-8 or ESC to exit.\033[0m"
+                echo -e "\033[1;31mInvalid option! Please select 0-9 or ESC to exit.\033[0m"
                 echo "Press Enter to continue..."
                 read
                 ;;
