@@ -676,6 +676,25 @@ stop_all_nexus_processes() {
     echo ""
 }
 
+# Function to restart all nodes (stop + start)
+restart_all_nodes() {
+    echo -e "\033[1;33m🔄 Restarting all Nexus Network nodes...\033[0m"
+    echo ""
+    
+    # First, stop all processes
+    echo -e "\033[1;31m🛑 Stopping all running processes...\033[0m"
+    stop_all_nexus_processes
+    
+    # Small delay to ensure processes are fully stopped
+    sleep 2
+    
+    # Then start all nodes
+    echo -e "\033[1;32m🚀 Starting all nodes...\033[0m"
+    launch_nexus_processes "all"
+    
+    echo -e "\033[1;32m✅ Node restart completed!\033[0m"
+}
+
 # Function to delete large log files
 cleanup_logs() {
     echo "Log Cleanup Utility"
@@ -1204,7 +1223,7 @@ display_menu() {
     echo ""
     echo -e "\033[1;34m1.\033[0m Run Nexus Network Script (All Nodes)"
     echo -e "\033[1;34m2.\033[0m Run Half Nodes (Resource-Saving Mode)"
-    echo -e "\033[1;34m3.\033[0m Check Running Processes"
+    echo -e "\033[1;34m3.\033[0m \033[1;31mRestart All Nodes\033[0m \033[1;33m(Stop + Start All)\033[0m"
     echo -e "\033[1;34m4.\033[0m \033[1;32mReal-Time Dashboard\033[0m \033[1;33m(Live Update)\033[0m"
     echo -e "\033[1;34m5.\033[0m \033[1;35mShow Successful Submissions\033[0m \033[1;33m(from logs)\033[0m"
     echo -e "\033[1;34m6.\033[0m Settings"
@@ -1289,7 +1308,7 @@ main() {
                 auto_return_to_menu
                 ;;
             3)
-                check_running_processes
+                restart_all_nodes
                 auto_return_to_menu
                 ;;
             4)
