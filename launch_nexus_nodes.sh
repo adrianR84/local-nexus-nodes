@@ -136,8 +136,10 @@ load_settings() {
         # Source the settings file
         source "$SETTINGS_FILE"
         echo -e "\033[1;32m✅ Settings loaded from $SETTINGS_FILE\033[0m"
+        echo -e "\033[1;36m📋 AUTO_CLEAN_LOGS is set to: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
     else
         echo -e "\033[1;33m⚠️  Settings file not found, using defaults\033[0m"
+        echo -e "\033[1;36m📋 AUTO_CLEAN_LOGS default: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
     fi
 }
 
@@ -461,6 +463,9 @@ show_paused_nodes_warning() {
 launch_nexus_processes() {
     local mode=${1:-"all"}  # Default to "all" if no parameter
     
+    # Reload settings to ensure we have the latest configuration
+    load_settings
+    
     # Check if any nodes are paused first
     if check_any_nodes_paused; then
         show_paused_nodes_warning
@@ -612,6 +617,8 @@ launch_nexus_processes() {
 
 # Function to stop all nexus processes
 stop_all_nexus_processes() {
+    local skip_confirm=$1  # Optional parameter to skip confirmation
+    
     echo "Stopping all Nexus Network processes..."
     echo "======================================"
     echo ""
@@ -633,9 +640,15 @@ stop_all_nexus_processes() {
     done
     echo ""
     
-    # Ask for confirmation
-    echo -e "\033[1;34mAre you sure you want to stop all processes? (y/N):\033[0m"
-    read -r confirm
+    # Skip confirmation if parameter is provided
+    if [ "$skip_confirm" = "force" ] || [ "$skip_confirm" = "skip" ]; then
+        echo -e "\033[1;33m🔄 Skipping confirmation (forced stop)...\033[0m"
+        confirm="y"
+    else
+        # Ask for confirmation
+        echo -e "\033[1;34mAre you sure you want to stop all processes? (y/N):\033[0m"
+        read -r confirm
+    fi
     
     case $confirm in
         [Yy]* )
@@ -681,9 +694,9 @@ restart_all_nodes() {
     echo -e "\033[1;33m🔄 Restarting all Nexus Network nodes...\033[0m"
     echo ""
     
-    # First, stop all processes
+    # First, stop all processes (skip confirmation since this is part of restart)
     echo -e "\033[1;31m🛑 Stopping all running processes...\033[0m"
-    stop_all_nexus_processes
+    stop_all_nexus_processes "force"
     
     # Small delay to ensure processes are fully stopped
     sleep 2
