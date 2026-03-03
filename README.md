@@ -7,20 +7,32 @@ A comprehensive bash script for managing multiple Nexus Network nodes with a use
 - `launch_nexus_nodes.sh` - Main bash script with menu-driven interface
 - `resource_monitor.sh` - Modular resource monitoring functions (CPU/RAM tracking)
 - `sync-to-wsl.ps1` - PowerShell script to sync shell files to WSL
-- `Sync to WSL.bat` - Batch file for double-click execution
-- `settings.conf` - Persistent configuration file (auto-created)
-- `README.md` - This file
+- `Sync-to-WSL.bat` - Windows batch file for easy WSL sync execution
+- `settings.conf` - Persistent configuration file (auto-created on first settings change)
+- `session-memory.md` - Comprehensive development session documentation
+- `.gitignore` - Git ignore rules for common files and directories
+- `.windsurf/rules/project.md` - Project-specific Windsurf development rules
+- `README.md` - This documentation file
 
 ## Quick Start
 
-### 1. Sync Files to WSL (Double-click)
+### 1. Sync Files to WSL
 
-Simply double-click `Sync to WSL.bat` to copy all shell files to your WSL Ubuntu directory and set executable permissions.
+**Option A: Windows Batch File (Recommended)**
+
+- Double-click `Sync-to-WSL.bat` to automatically sync all shell files to WSL Ubuntu
+- Sets executable permissions and creates necessary directories
+
+**Option B: Manual Sync**
+
+- Open Command Prompt as Administrator
+- Navigate to project directory: `cd "c:\_Adi\_Work\_scripts\nexus-nodes"`
+- Run: `Sync-to-WSL.bat`
 
 ### 2. Run Nexus Network Manager
 
 1. Open WSL Ubuntu terminal
-2. Navigate to nexus directory: `cd ~/nexus`
+2. Navigate to nexus directory: `cd ~/nexus-nodes` (or your configured WSL path)
 3. Run the script: `./launch_nexus_nodes.sh`
 
 ## Menu Options
@@ -297,3 +309,33 @@ All configuration changes are automatically saved:
 - **Persistent State**: Your preferences survive script restarts
 - **Default Fallbacks**: Sensible defaults if settings file is missing
 - **Error Handling**: Graceful handling of corrupted settings files
+
+## Documentation
+
+### Session Memory (`session-memory.md`)
+
+Comprehensive development history and project documentation:
+
+- **Complete Project History**: All enhancements from February 27-28, 2026 development session
+- **Technical Achievements**: Architecture improvements, new features, and bug fixes
+- **Key Learnings**: Development insights and best practices discovered
+- **Future Roadmap**: Potential enhancements and expansion opportunities
+- **Production Status**: System readiness and deployment considerations
+
+### Windsurf Configuration (`.windsurf/`)
+
+Project-specific development environment configuration:
+
+- **Rules Directory**: `.windsurf/rules/project.md` - Project-specific coding guidelines
+- **Workflows**: `.windsurf/workflows/sync-files.md` - WSL file synchronization workflow
+- **IDE Integration**: Windsurf-specific settings and configurations
+
+### Git Configuration (`.gitignore`)
+
+Comprehensive ignore rules for clean repository management:
+
+- **OS Files**: System-generated files (.DS_Store, Thumbs.db, etc.)
+- **Editor Files**: IDE and editor temporary files (.vscode/, .idea/, \*.swp)
+- **Build Artifacts**: Compiled binaries and temporary build files
+- **Environment Files**: Local configuration files (.env, settings)
+- **Backup Files**: Various backup and temporary file extensions
