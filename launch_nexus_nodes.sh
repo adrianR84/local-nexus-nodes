@@ -1297,6 +1297,28 @@ main() {
             invalidate_cache_and_refresh
         fi
         
+        # Check system resources for automatic restart
+        if [ -f "resource_monitor.sh" ]; then
+            system_resources=$(get_system_resources)
+            # Parse RAM usage from system resources (format: "cpu% mem_used/mem_total")
+            ram_usage=$(echo "$system_resources" | awk '{print $2}' | cut -d'/' -f1 | cut -d'G' -f1)
+            
+            # Convert to GB for comparison
+            if [ -n "$ram_usage" ]; then
+                ram_gb=0
+            else
+                ram_gb=$(echo "scale=2; $ram_usage / 1024" | bc 2>/dev/null || echo "0")
+            fi
+            
+            # Check if RAM usage exceeds 2GB
+            if (( $(echo "$ram_gb > 2" | bc 2>/dev/null || echo "0") )); then
+                echo -e "\033[1;31m⚠️  High RAM usage detected: ${ram_gb}GB - Auto-restarting nodes...\033[0m"
+                restart_all_nodes
+                invalidate_cache_and_refresh
+                sleep 3  # Brief pause before continuing
+            fi
+        fi
+        
         display_menu
         
         # Add a timeout to read command to allow periodic checking
