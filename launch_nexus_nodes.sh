@@ -1257,6 +1257,25 @@ display_menu() {
     resource_summary=$(get_resource_summary)
     echo -e "   \033[1;35m💻 Resource Usage:\033[0m \033[1;33m$resource_summary\033[0m"
     
+    # Nexus Node RAM Debug Information
+    if [ -f "resource_monitor.sh" ]; then
+        nodes_info=$(get_nodes_resources)
+        # Extract RSS (memory in KB) from nodes_info: "cpu mem rss count"
+        node_rss_kb=$(echo "$nodes_info" | awk '{print $3}')
+        
+        # Convert KB to MB then to GB
+        if [ "$node_rss_kb" -gt 0 ]; then
+            node_ram_mb=$(echo "scale=1; $node_rss_kb / 1024" | bc 2>/dev/null || echo "0")
+            ram_gb=$(echo "scale=2; $node_ram_mb / 1024" | bc 2>/dev/null || echo "0")
+            node_ram_usage="${node_ram_mb}MB (${ram_gb}GB)"
+        else
+            ram_gb=0
+            node_ram_usage="0MB"
+        fi
+        
+        echo -e "   \033[1;33m🔍 Node RAM Debug: used='$node_ram_usage' | gb='$ram_gb'\033[0m"
+    fi
+    
     # Show auto-start countdown if auto-start is enabled and activation is active
     if [ "$AUTO_START_INACTIVITY" = true ]; then
         activation_time=$(get_auto_start_activation_time)
@@ -1297,25 +1316,27 @@ main() {
             invalidate_cache_and_refresh
         fi
         
-        # Check system resources for automatic restart
+        # Check Nexus node RAM usage for automatic restart
         if [ -f "resource_monitor.sh" ]; then
-            system_resources=$(get_system_resources)
-            # Parse RAM usage from system resources (format: "cpu% mem_used/mem_total")
-            ram_usage=$(echo "$system_resources" | awk '{print $2}' | cut -d'/' -f1 | cut -d'G' -f1)
+            # Get RAM usage specifically for Nexus nodes
+            nodes_info=$(get_nodes_resources)
+            # Extract RSS (memory in KB) from nodes_info: "cpu mem rss count"
+            node_rss_kb=$(echo "$nodes_info" | awk '{print $3}')
             
-            # Convert to GB for comparison
-            if [ -n "$ram_usage" ]; then
-                ram_gb=0
+            # Convert KB to GB for comparison
+            if [ "$node_rss_kb" -gt 0 ]; then
+                node_ram_mb=$(echo "scale=1; $node_rss_kb / 1024" | bc 2>/dev/null || echo "0")
+                ram_gb=$(echo "scale=2; $node_ram_mb / 1024" | bc 2>/dev/null || echo "0")
             else
-                ram_gb=$(echo "scale=2; $ram_usage / 1024" | bc 2>/dev/null || echo "0")
+                ram_gb=0
             fi
             
-            # Check if RAM usage exceeds 2GB
-            if (( $(echo "$ram_gb > 2" | bc 2>/dev/null || echo "0") )); then
-                echo -e "\033[1;31m⚠️  High RAM usage detected: ${ram_gb}GB - Auto-restarting nodes...\033[0m"
+            # Check if Nexus node RAM usage exceeds 0.1GB
+            if (( $(echo "$ram_gb > 0.1" | bc 2>/dev/null || echo "0") )); then
+                echo -e "\033[1;31m⚠️  High Nexus node RAM usage detected: ${ram_gb}GB - Auto-restarting nodes...\033[0m"
+                sleep 5  # Brief pause before continuing
                 restart_all_nodes
                 invalidate_cache_and_refresh
-                sleep 3  # Brief pause before continuing
             fi
         fi
         
