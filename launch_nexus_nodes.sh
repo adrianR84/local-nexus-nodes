@@ -35,6 +35,10 @@ AUTO_CLEAN_LOGS=false
 AUTO_START_INACTIVITY=true
 INACTIVITY_TIMEOUT=10  # minutes
 
+# Setting: Auto restart on high RAM usage (GB)
+# Will automatically restart nodes if RAM usage exceeds this threshold
+AUTO_RESTART_RAM_THRESHOLD=1.5  # GB
+
 # Settings file path
 SETTINGS_FILE="settings.conf"
 
@@ -137,9 +141,11 @@ load_settings() {
         source "$SETTINGS_FILE"
         echo -e "\033[1;32m✅ Settings loaded from $SETTINGS_FILE\033[0m"
         echo -e "\033[1;36m📋 AUTO_CLEAN_LOGS is set to: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
+        echo -e "\033[1;36m📋 AUTO_RESTART_RAM_THRESHOLD is set to: \033[1;33m$AUTO_RESTART_RAM_THRESHOLD\033[0m"
     else
         echo -e "\033[1;33m⚠️  Settings file not found, using defaults\033[0m"
         echo -e "\033[1;36m📋 AUTO_CLEAN_LOGS default: \033[1;33m$AUTO_CLEAN_LOGS\033[0m"
+        echo -e "\033[1;36m📋 AUTO_RESTART_RAM_THRESHOLD default: \033[1;33m$AUTO_RESTART_RAM_THRESHOLD\033[0m"
     fi
 }
 
@@ -157,6 +163,9 @@ AUTO_START_INACTIVITY=$AUTO_START_INACTIVITY
 
 # Inactivity timeout in minutes
 INACTIVITY_TIMEOUT=$INACTIVITY_TIMEOUT
+
+# Auto restart RAM threshold in GB
+AUTO_RESTART_RAM_THRESHOLD=$AUTO_RESTART_RAM_THRESHOLD
 EOF
     echo -e "\033[1;32m✅ Settings saved to $SETTINGS_FILE\033[0m"
 }
@@ -1247,7 +1256,7 @@ display_menu() {
     echo ""
     echo "=========================================="
     echo -e "\033[1;36m📋 Current Settings:\033[0m"
-    echo -e "   Auto-Clean Logs: \033[1;33m$AUTO_CLEAN_LOGS\033[0m | Auto-Start: \033[1;33m$AUTO_START_INACTIVITY\033[0m (\033[1;36m$INACTIVITY_TIMEOUT min\033[0m)"
+    echo -e "   Auto-Clean Logs: \033[1;33m$AUTO_CLEAN_LOGS\033[0m | Auto-Start: \033[1;33m$AUTO_START_INACTIVITY\033[0m (\033[1;36m$INACTIVITY_TIMEOUT min\033[0m) | Auto-Restart Max RAM: \033[1;33m$AUTO_RESTART_RAM_THRESHOLD GB\033[0m"
     
     # Get and display total submissions
     total_submissions=$(get_total_submissions)
@@ -1331,9 +1340,9 @@ main() {
                 ram_gb=0
             fi
             
-            # Check if Nexus node RAM usage exceeds 0.1GB
-            if (( $(echo "$ram_gb > 0.1" | bc 2>/dev/null || echo "0") )); then
-                echo -e "\033[1;31m⚠️  High Nexus node RAM usage detected: ${ram_gb}GB - Auto-restarting nodes...\033[0m"
+            # Check if Nexus node RAM usage exceeds threshold
+            if (( $(echo "$ram_gb > $AUTO_RESTART_RAM_THRESHOLD" | bc 2>/dev/null || echo "0") )); then
+                echo -e "\033[1;31m⚠️  High Nexus node RAM usage detected: ${ram_gb}GB (threshold: ${AUTO_RESTART_RAM_THRESHOLD}GB) - Auto-restarting nodes...\033[0m"
                 sleep 5  # Brief pause before continuing
                 restart_all_nodes
                 invalidate_cache_and_refresh
