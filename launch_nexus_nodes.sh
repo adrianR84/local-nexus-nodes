@@ -37,7 +37,7 @@ INACTIVITY_TIMEOUT=10  # minutes
 
 # Setting: Auto restart on high RAM usage (GB)
 # Will automatically restart nodes if RAM usage exceeds this threshold
-AUTO_RESTART_RAM_THRESHOLD=1.5  # GB
+AUTO_RESTART_RAM_THRESHOLD=2.5  # GB
 
 # Settings file path
 SETTINGS_FILE="settings.conf"
@@ -1266,34 +1266,42 @@ display_menu() {
     resource_summary=$(get_resource_summary)
     echo -e "   \033[1;35m💻 Resource Usage:\033[0m \033[1;33m$resource_summary\033[0m"
     
-    # Nexus Node RAM Debug Information
-    if [ -f "resource_monitor.sh" ]; then
-        nodes_info=$(get_nodes_resources)
-        # Extract RSS (memory in KB) from nodes_info: "cpu mem rss count"
-        node_rss_kb=$(echo "$nodes_info" | awk '{print $3}')
-        
-        # Convert KB to MB then to GB
-        if [ "$node_rss_kb" -gt 0 ]; then
-            node_ram_mb=$(echo "scale=1; $node_rss_kb / 1024" | bc 2>/dev/null || echo "0")
-            ram_gb=$(echo "scale=2; $node_ram_mb / 1024" | bc 2>/dev/null || echo "0")
-            node_ram_usage="${node_ram_mb}MB (${ram_gb}GB)"
-        else
-            ram_gb=0
-            node_ram_usage="0MB"
-        fi
-        
-        echo -e "   \033[1;33m🔍 Node RAM Debug: used='$node_ram_usage' | gb='$ram_gb'\033[0m"
-    fi
     
+    # # Nexus Node RAM Debug Information
+    # if [ -f "resource_monitor.sh" ]; then
+    #     nodes_info=$(get_nodes_resources)
+    #     # Extract RSS (memory in KB) from nodes_info: "cpu mem rss count"
+    #     node_rss_kb=$(echo "$nodes_info" | awk '{print $3}')
+        
+    #     # Convert KB to MB then to GB
+    #     if [ "$node_rss_kb" -gt 0 ]; then
+    #         node_ram_mb=$(echo "scale=1; $node_rss_kb / 1024" | bc 2>/dev/null || echo "0")
+    #         ram_gb=$(echo "scale=2; $node_ram_mb / 1024" | bc 2>/dev/null || echo "0")
+    #         node_ram_usage="${node_ram_mb}MB (${ram_gb}GB)"
+    #     else
+    #         ram_gb=0
+    #         node_ram_usage="0MB"
+    #     fi
+        
+    #     echo -e "   \033[1;33m🔍 Node RAM Debug: used='$node_ram_usage' | gb='$ram_gb'\033[0m"
+    # fi
+    
+
     # Show auto-start countdown if auto-start is enabled and activation is active
     if [ "$AUTO_START_INACTIVITY" = true ]; then
         activation_time=$(get_auto_start_activation_time)
         if [ "$activation_time" -gt 0 ]; then
-            countdown=$(get_auto_start_countdown)
             if [ $CACHED_PAUSED_COUNT -gt 0 ]; then
+                countdown=$(get_auto_start_countdown)
                 echo -e "   \033[1;33m⏰ Auto-restart in: \033[1;31m$countdown\033[0m"
             elif [ $CACHED_RUNNING_COUNT -gt 0 ] && [ $CACHED_RUNNING_COUNT -le 6 ]; then
+                countdown=$(get_auto_start_countdown)
                 echo -e "   \033[1;33m⏰ Auto-switch to full mode in: \033[1;31m$countdown\033[0m"
+            elif [ $CACHED_RUNNING_COUNT -eq 0 ]; then
+                countdown=$(get_auto_start_countdown)
+                echo -e "   \033[1;33m⏰ Auto-start in: \033[1;31m$countdown\033[0m"
+            elif [ $CACHED_RUNNING_COUNT -gt 6 ]; then
+                echo -e "   \033[1;32m✅ All nodes running - no action needed\033[0m"
             fi
         fi
     fi
@@ -1312,6 +1320,16 @@ main() {
     
     # Initialize node state cache
     update_node_state_cache
+    
+    # Initialize auto-start countdown if enabled and no activation time exists
+    if [ "$AUTO_START_INACTIVITY" = true ]; then
+        activation_time=$(get_auto_start_activation_time)
+        if [ "$activation_time" -eq 0 ]; then
+            # First run - start the countdown now
+            set_auto_start_activation_time
+            echo -e "\033[1;36m🚀 Auto-start countdown initiated (${INACTIVITY_TIMEOUT} minutes)\033[0m"
+        fi
+    fi
     
     # Check for inactivity and auto-start if needed at startup
     if check_inactivity_exact; then
