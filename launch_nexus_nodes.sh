@@ -4,7 +4,22 @@
 # This script provides a menu to manage nexus-network processes
 
 # Determine actual script directory (handles symlinks correctly)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolves symlinks by finding the actual file path, then getting its directory
+resolve_script_dir() {
+    local source="${BASH_SOURCE[0]}"
+    # If source is a symlink, resolve it
+    while [ -L "$source" ]; do
+        local link_target="$(readlink "$source")"
+        # If link is relative, resolve it relative to the symlink's directory
+        if [[ "$link_target" != /* ]]; then
+            source="$(dirname "$source")/$link_target"
+        else
+            source="$link_target"
+        fi
+    done
+    dirname "$source"
+}
+SCRIPT_DIR="$(resolve_script_dir)"
 
 # Source resource monitoring functions
 if [ -f "$SCRIPT_DIR/resource_monitor.sh" ]; then
