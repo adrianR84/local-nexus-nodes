@@ -738,6 +738,68 @@ restart_all_nodes() {
     echo -e "\033[1;32m✅ Node restart completed!\033[0m"
 }
 
+# Function to get current Nexus CLI version
+get_nexus_version() {
+    nexus-network -V 2>/dev/null || echo "Not installed"
+}
+
+# Function to update Nexus CLI
+update_nexus_cli() {
+    echo -e "\033[1;33m🔄 Nexus CLI Update\033[0m"
+    echo "=========================="
+    echo ""
+
+    # Check current version
+    current_version=$(get_nexus_version)
+    echo -e "\033[1;36m📋 Current Version:\033[0m \033[1;32m$current_version\033[0m"
+    echo ""
+
+    # Confirm before proceeding
+    echo -e "\033[1;31m⚠️  WARNING: This will:\033[0m"
+    echo "   1. Stop all running Nexus nodes"
+    echo "   2. Download and install the latest Nexus CLI"
+    echo "   3. Reload shell configuration"
+    echo "   4. Restart all nodes"
+    echo ""
+    echo -e "\033[1;34mProceed with update? (y/N):\033[0m"
+    read -r confirm
+
+    case $confirm in
+        [Yy]* )
+            echo ""
+            echo -e "\033[1;31m🛑 Stopping all running nodes...\033[0m"
+            stop_all_nexus_processes "force"
+            sleep 2
+
+            echo ""
+            echo -e "\033[1;32m📥 Downloading and installing latest Nexus CLI...\033[0m"
+            curl https://cli.nexus.xyz/ | sh
+
+            echo ""
+            echo -e "\033[1;36m🔄 Reloading shell configuration...\033[0m"
+            source ~/.bashrc
+
+            # Check new version
+            new_version=$(get_nexus_version)
+            echo ""
+            echo -e "\033[1;32m✨ New Version Installed:\033[0m \033[1;32m$new_version\033[0m"
+            echo ""
+
+            echo -e "\033[1;32m🚀 Restarting all nodes...\033[0m"
+            launch_nexus_processes "all"
+
+            echo ""
+            echo -e "\033[1;32m✅ Nexus CLI update completed!\033[0m"
+            ;;
+        * )
+            echo ""
+            echo -e "\033[1;33m❌ Update cancelled.\033[0m"
+            ;;
+    esac
+
+    echo ""
+}
+
 # Function to delete large log files
 cleanup_logs() {
     echo "Log Cleanup Utility"
@@ -1273,6 +1335,7 @@ display_menu() {
     get_pause_resume_menu_text
     get_all_half_menu_text
     echo -e "\033[1;34m9.\033[0m \033[1;35mSystem Resources\033[0m \033[1;33m(CPU/RAM Monitor)\033[0m"
+    echo -e "\033[1;34mU.\033[0m \033[1;32mUpdate Nexus CLI\033[0m \033[1;33m(Download latest + Restart)\033[0m"
     echo -e "\033[1;34m0.\033[0m \033[1;31mStop All Nexus Processes\033[0m \033[1;33m(Force Kill)\033[0m"
     echo ""
     echo "=========================================="
@@ -1437,13 +1500,18 @@ main() {
                 toggle_all_half_nodes
                 auto_return_to_menu
                 ;;
+            U|u)
+                update_nexus_cli
+                echo "Press Enter to continue..."
+                read
+                ;;
             0)
                 stop_all_nexus_processes
                 echo "Press Enter to continue..."
                 read
                 ;;
             *)
-                echo -e "\033[1;31mInvalid option! Please select 0-9 or ESC to exit.\033[0m"
+                echo -e "\033[1;31mInvalid option! Please select 0-9, U, or ESC to exit.\033[0m"
                 echo "Press Enter to continue..."
                 read
                 ;;
