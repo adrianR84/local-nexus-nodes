@@ -25,7 +25,7 @@ SCRIPT_DIR="$(resolve_script_dir)"
 if [ -f "$SCRIPT_DIR/resource_monitor.sh" ]; then
     source "$SCRIPT_DIR/resource_monitor.sh"
 else
-    echo -e "\033[1;31mError: resource_monitor.sh not found. Resource monitoring will be unavailable.\033[0m"
+    echo -e "\033[1;31mError: resource_monitor.sh not found at $SCRIPT_DIR/resource_monitor.sh\033[0m"
 fi
 
 # Array of node IDs from the nexus.txt file
