@@ -3,9 +3,12 @@
 # Nexus Network Node Launcher - Menu Version
 # This script provides a menu to manage nexus-network processes
 
+# Determine actual script directory (handles symlinks correctly)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Source resource monitoring functions
-if [ -f "resource_monitor.sh" ]; then
-    source resource_monitor.sh
+if [ -f "$SCRIPT_DIR/resource_monitor.sh" ]; then
+    source "$SCRIPT_DIR/resource_monitor.sh"
 else
     echo -e "\033[1;31mError: resource_monitor.sh not found. Resource monitoring will be unavailable.\033[0m"
 fi
@@ -39,8 +42,14 @@ INACTIVITY_TIMEOUT=10  # minutes
 # Will automatically restart nodes if RAM usage exceeds this threshold
 AUTO_RESTART_RAM_THRESHOLD=2.5  # GB
 
-# Settings file path
-SETTINGS_FILE="settings.conf"
+# Settings file path (relative to script directory)
+SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
+
+# Auto-start activation file (relative to script directory)
+ACTIVATION_FILE="$SCRIPT_DIR/.auto_start_activation"
+
+# Logs directory (relative to script directory)
+LOGS_DIR="$SCRIPT_DIR/logs"
 
 # Global variables for tracking node states (cached for efficiency)
 CACHED_RUNNING_COUNT=0
@@ -49,9 +58,8 @@ CACHE_VALID=false
 
 # Function to check if nodes have been inactive
 get_auto_start_activation_time() {
-    local activation_file=".auto_start_activation"
-    if [ -f "$activation_file" ]; then
-        cat "$activation_file"
+    if [ -f "$ACTIVATION_FILE" ]; then
+        cat "$ACTIVATION_FILE"
     else
         echo "0"
     fi
@@ -59,14 +67,12 @@ get_auto_start_activation_time() {
 
 # Function to set auto-start activation time
 set_auto_start_activation_time() {
-    local activation_file=".auto_start_activation"
-    echo "$(date +%s)" > "$activation_file"
+    echo "$(date +%s)" > "$ACTIVATION_FILE"
 }
 
 # Function to clear auto-start activation time
 clear_auto_start_activation_time() {
-    local activation_file=".auto_start_activation"
-    rm -f "$activation_file"
+    rm -f "$ACTIVATION_FILE"
 }
 
 # Function to check if nodes have been inactive (exact timeout version)
@@ -107,7 +113,7 @@ get_total_submissions() {
     local total_submissions=0
     
     # Search through all log files for successful submissions
-    for log_file in logs/nexus_node_*.log; do
+    for log_file in $LOGS_DIR/nexus_node_*.log; do
         if [ -f "$log_file" ]; then
             submissions=$(grep -i "Proof submitted successfully for task" "$log_file" 2>/dev/null)
             count=$(echo "$submissions" | grep -c .)
@@ -395,9 +401,9 @@ check_logs_status() {
     local check_type=$1  # "directory" or "files"
     
     if [ "$check_type" = "directory" ]; then
-        [ -d "logs" ]
+        [ -d "$LOGS_DIR" ]
     elif [ "$check_type" = "files" ]; then
-        [ -d "logs" ] && ls logs/nexus_node_*.log 1> /dev/null 2>&1
+        [ -d "$LOGS_DIR" ] && ls $LOGS_DIR/nexus_node_*.log 1> /dev/null 2>&1
     fi
 }
 
@@ -409,7 +415,7 @@ show_log_sizes() {
         echo -e "\033[1;36m📄 Individual log file sizes:\033[0m"
     fi
     
-    for log_file in logs/nexus_node_*.log; do
+    for log_file in $LOGS_DIR/nexus_node_*.log; do
         if [ -f "$log_file" ]; then
             file_size=$(du -sh "$log_file" 2>/dev/null | cut -f1)
             node_id=$(basename "$log_file" .log | sed 's/nexus_node_//')
@@ -443,7 +449,7 @@ show_error_and_wait() {
 
 # Function to calculate total log directory size
 get_logs_size() {
-    du -sh logs 2>/dev/null | cut -f1
+    du -sh "$LOGS_DIR" 2>/dev/null | cut -f1
 }
 
 # Function to check if any nodes are paused (using cached values for efficiency)
@@ -481,7 +487,7 @@ launch_nexus_processes() {
         return
     fi
     
-    mkdir -p logs
+    mkdir -p "$LOGS_DIR"
     
     # Auto-clean logs if setting is true
     if [ "$AUTO_CLEAN_LOGS" = true ]; then
@@ -502,7 +508,7 @@ launch_nexus_processes() {
             # Delete log files only for nodes that are NOT running
             deleted_count=0
             preserved_count=0
-            for log_file in logs/nexus_node_*.log; do
+            for log_file in $LOGS_DIR/nexus_node_*.log; do
                 if [ -f "$log_file" ]; then
                     node_id=$(basename "$log_file" .log | sed 's/nexus_node_//')
                     
@@ -570,7 +576,7 @@ launch_nexus_processes() {
             echo -e "\033[1;36m📋 Starting Node $node_id...\033[0m"
             
             # Start nexus-network in background with nohup, redirecting output to log file
-            nohup nexus-network start --headless --node-id "$node_id" > "logs/nexus_node_$node_id.log" 2>&1 &
+            nohup nexus-network start --headless --node-id "$node_id" > "$LOGS_DIR/nexus_node_$node_id.log" 2>&1 &
             
             # Add a small delay to prevent overwhelming the system
             sleep 1
@@ -751,13 +757,13 @@ cleanup_logs() {
             echo -e "\033[1;31m🗑️  Deleting log files...\033[0m"
             
             # Delete log files
-            rm -f logs/nexus_node_*.log
+            rm -f $LOGS_DIR/nexus_node_*.log
             
             echo -e "\033[1;32m✅ All log files deleted successfully!\033[0m"
             echo ""
             
             # Show new directory size
-            if [ -d "logs" ] && [ "$(ls -A logs)" ]; then
+            if [ -d "$LOGS_DIR" ] && [ "$(ls -A $LOGS_DIR)" ]; then
                 new_size=$(get_logs_size)
                 echo -e "\033[1;36m📁 New logs directory size: \033[1;34m$new_size\033[0m"
             else
@@ -800,7 +806,7 @@ show_successful_submissions() {
         total_submissions=0
         
         # Search through all log files for successful submissions
-        for log_file in logs/nexus_node_*.log; do
+        for log_file in $LOGS_DIR/nexus_node_*.log; do
             if [ -f "$log_file" ]; then
                 node_id=$(basename "$log_file" .log | sed 's/nexus_node_//')
                 submissions=$(grep -i "Proof submitted successfully for task" "$log_file" 2>/dev/null)
@@ -824,7 +830,7 @@ show_successful_submissions() {
             echo ""
             echo -e "\033[1;34m📊 Summary:\033[0m"
             echo -e "   Total successful submissions across all nodes: \033[1;32m$(get_total_submissions)\033[0m"
-            echo -e "   Active nodes: \033[1;34m$(ls logs/nexus_node_*.log | wc -l)\033[0m"
+            echo -e "   Active nodes: \033[1;34m$(ls $LOGS_DIR/nexus_node_*.log | wc -l)\033[0m"
         fi
         
         echo ""
