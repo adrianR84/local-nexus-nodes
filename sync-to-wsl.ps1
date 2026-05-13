@@ -10,7 +10,7 @@
 #>
 
 # Source and destination paths
-$sourcePath = "c:\_Adi\_Work\_scripts\nexus-nodes\*.sh"
+$sourcePath = "c:\_Adi\_Work\Apps\_scripts\nexus-nodes\*.sh"
 $destinationPath = "\\wsl.localhost\Ubuntu-18.04\home\adi\nexus-nodes\"
 
 Write-Host "Syncing shell files to WSL Ubuntu..." -ForegroundColor Cyan
